@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 
+import 'app_channel.dart';
+
 /// The languages a child can say a word in, to get it in English.
 enum HomeLanguage {
   bengali('Bengali', 'বাংলা', ['bn_IN', 'bn_BD'], TranslateLanguage.bengali),
@@ -34,8 +36,9 @@ class DeviceTranslator implements WordTranslator {
   @override
   Future<bool> isReady(HomeLanguage lang) async {
     try {
-      return await _models.isModelDownloaded(lang.mlkit.bcpCode) &&
-          await _models.isModelDownloaded(TranslateLanguage.english.bcpCode);
+      const wait = Duration(seconds: 5);
+      return await _models.isModelDownloaded(lang.mlkit.bcpCode).timeout(wait) &&
+          await _models.isModelDownloaded(TranslateLanguage.english.bcpCode).timeout(wait);
     } catch (e) {
       debugPrint('translation check failed: $e');
       return false;
@@ -46,10 +49,12 @@ class DeviceTranslator implements WordTranslator {
   Future<bool> prepare(HomeLanguage lang) async {
     if (await isReady(lang)) return true;
     try {
-      return await _models.downloadModel(lang.mlkit.bcpCode, isWifiRequired: false) &&
-          await _models.downloadModel(TranslateLanguage.english.bcpCode, isWifiRequired: false);
-    } catch (e) {
-      debugPrint('translation download failed: $e');
+      // A slow connection can take a while, but not forever.
+      const wait = Duration(minutes: 3);
+      return await _models.downloadModel(lang.mlkit.bcpCode, isWifiRequired: false).timeout(wait) &&
+          await _models.downloadModel(TranslateLanguage.english.bcpCode, isWifiRequired: false).timeout(wait);
+    } catch (e, st) {
+      reportError('Translation download: $e', st);
       return false;
     }
   }
@@ -61,10 +66,10 @@ class DeviceTranslator implements WordTranslator {
         sourceLanguage: lang.mlkit,
         targetLanguage: TranslateLanguage.english,
       );
-      final english = cleanTranslation(await t.translateText(text));
+      final english = cleanTranslation(await t.translateText(text).timeout(const Duration(seconds: 10)));
       return english.isEmpty ? null : english;
-    } catch (e) {
-      debugPrint('translation failed: $e');
+    } catch (e, st) {
+      reportError('Translating: $e', st);
       return null;
     }
   }

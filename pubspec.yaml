@@ -1,7 +1,7 @@
 name: sreyhan_diary
 description: "A playful travel diary that helps a child talk about their photos in English."
 publish_to: 'none'
-version: 0.4.0+4
+version: 0.4.1+5
 
 environment:
   sdk: ^3.13.5
@@ -16,7 +16,6 @@ dependencies:
   image_picker: ^1.2.4
   package_info_plus: ^10.2.2
   path_provider: ^2.1.6
-  shared_preferences: ^2.5.6
   speech_to_text: ^7.5.0
 
 dev_dependencies:

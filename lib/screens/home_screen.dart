@@ -13,6 +13,7 @@ import '../widgets/sheru.dart';
 import '../widgets/sky.dart';
 import '../widgets/update_card.dart';
 import 'day_screen.dart';
+import 'how_to_screen.dart';
 import 'moment_screen.dart';
 import 'word_jar_screen.dart';
 
@@ -43,6 +44,22 @@ class _HomeScreenState extends State<HomeScreen> {
       _store = store..addListener(_load);
       _load();
     }
+    // The first time, show how everything works.
+    if (!_guideChecked) {
+      _guideChecked = true;
+      if (_app.prefs.getBool(seenGuideKey) != true) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openGuide();
+        });
+      }
+    }
+  }
+
+  bool _guideChecked = false;
+
+  void _openGuide() {
+    _app.prefs.setBool(seenGuideKey, true);
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const HowToScreen()));
   }
 
   @override
@@ -115,7 +132,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     Column(
                       children: [
-                        _MusicToggle(sounds: _app.sounds),
+                        Row(
+                          children: [
+                            BlobButton(
+                              icon: Icons.question_mark_rounded,
+                              color: Gj.peacock,
+                              size: 54,
+                              onTap: _openGuide,
+                            ),
+                            const SizedBox(width: 8),
+                            _MusicToggle(sounds: _app.sounds),
+                          ],
+                        ),
                         const SizedBox(height: 10),
                         _JarButton(count: collectWords(_days).length, onTap: _openJar),
                       ],

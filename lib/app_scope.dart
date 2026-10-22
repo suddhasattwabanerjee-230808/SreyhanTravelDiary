@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'app_channel.dart';
 import 'diary_store.dart';
 import 'sound_board.dart';
 import 'speaker.dart';
@@ -21,6 +22,7 @@ class App extends InheritedWidget {
     required this.labeler,
     required this.translator,
     required this.speaker,
+    required this.prefs,
     this.now = DateTime.now,
     required super.child,
   });
@@ -32,6 +34,7 @@ class App extends InheritedWidget {
   final PhotoLabeler labeler;
   final WordTranslator translator;
   final Speaker speaker;
+  final Prefs prefs;
   final DateTime Function() now;
 
   static App of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<App>()!;

@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'app_channel.dart';
 import 'app_scope.dart';
 import 'diary_store.dart';
 import 'screens/home_screen.dart';
@@ -13,24 +17,48 @@ import 'theme.dart';
 import 'vision.dart';
 import 'voice.dart';
 
+/// Whatever goes wrong while starting, the diary still opens: each step has
+/// a time limit, and errors are noted in Download (SreyhanDiary-crash-…)
+/// rather than leaving a black screen.
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  final store = await DiaryStore.open();
-  final sounds = await SoundBoard.load();
-  runApp(
-    DiaryApp(
-      store: store,
-      sounds: sounds,
-      voice: DeviceVoiceInput(),
-      pickPhoto: pickPhotoFromDevice,
-      labeler: DeviceLabeler(),
-      translator: DeviceTranslator(),
-      speaker: DeviceSpeaker(),
-      onResumed: Updates.instance.checkIfDue,
-    ),
-  );
-  Updates.instance.checkIfDue();
+  await runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      reportError(details.exception, details.stack);
+    };
+    Future<T> step<T>(String name, Future<T> Function() run, T Function() fallback) async {
+      try {
+        return await run().timeout(const Duration(seconds: 5));
+      } catch (e, st) {
+        reportError('Starting up ($name): $e', st);
+        return fallback();
+      }
+    }
+
+    await step('orientation', () => SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]), () {});
+    final store = await step(
+      'diary folder',
+      DiaryStore.open,
+      // Where path_provider puts app documents on Android anyway.
+      () => DiaryStore(Directory('/data/user/0/com.bittu.sreyhan_diary/app_flutter/diary')),
+    );
+    final prefs = await Prefs.load();
+    runApp(
+      DiaryApp(
+        store: store,
+        sounds: SoundBoard(prefs),
+        prefs: prefs,
+        voice: DeviceVoiceInput(),
+        pickPhoto: pickPhotoFromDevice,
+        labeler: DeviceLabeler(),
+        translator: DeviceTranslator(),
+        speaker: DeviceSpeaker(),
+        onResumed: Updates.instance.checkIfDue,
+      ),
+    );
+    Updates.instance.checkIfDue();
+  }, reportError);
 }
 
 /// Photos are scaled down on the way in: plenty for a page, light on storage.
@@ -54,6 +82,7 @@ class DiaryApp extends StatefulWidget {
     required this.labeler,
     required this.translator,
     required this.speaker,
+    this.prefs,
     this.now = DateTime.now,
     this.onResumed,
   });
@@ -65,6 +94,9 @@ class DiaryApp extends StatefulWidget {
   final PhotoLabeler labeler;
   final WordTranslator translator;
   final Speaker speaker;
+
+  /// Saved settings; previews get ones that save nowhere.
+  final Prefs? prefs;
   final DateTime Function() now;
 
   /// When the app comes back to the front (checks for updates).
@@ -75,6 +107,8 @@ class DiaryApp extends StatefulWidget {
 }
 
 class _DiaryAppState extends State<DiaryApp> with WidgetsBindingObserver {
+  final _memoryPrefs = Prefs.memory();
+
   @override
   void initState() {
     super.initState();
@@ -109,6 +143,7 @@ class _DiaryAppState extends State<DiaryApp> with WidgetsBindingObserver {
       labeler: widget.labeler,
       translator: widget.translator,
       speaker: widget.speaker,
+      prefs: widget.prefs ?? _memoryPrefs,
       now: widget.now,
       child: MaterialApp(
         title: "Sreyhan's Travel Diary",

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.1] - 2026-10-22
+
+### Fixed
+- 0.4.0 stopped at a black screen. Startup waited on the shared_preferences
+  plugin, which never answers in release builds. Settings are now kept by
+  Android directly, every startup step has a time limit, and the diary
+  always opens.
+- If something goes wrong, a note is saved in Download
+  (`SreyhanDiary-crash-…`), including why the last run ended if it crashed
+  or froze. Speech, reading aloud, photo labels and translation can no
+  longer hang the app either.
+
+### Added
+- How to Use: a picture guide to every part of the app, read aloud by
+  Sheru. It opens by itself the first time; the ? button on the home screen
+  brings it back.
+
 ## [0.4.0] - 2026-10-22
 
 ### Added

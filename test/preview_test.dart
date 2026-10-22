@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sreyhan_diary/app_channel.dart';
 import 'package:sreyhan_diary/diary_store.dart';
 import 'package:sreyhan_diary/games/games_screen.dart';
 import 'package:sreyhan_diary/games/ispy_game.dart';
@@ -20,6 +20,7 @@ import 'package:sreyhan_diary/games/which_photo_game.dart';
 import 'package:sreyhan_diary/main.dart';
 import 'package:sreyhan_diary/models.dart';
 import 'package:sreyhan_diary/screens/day_screen.dart';
+import 'package:sreyhan_diary/screens/how_to_screen.dart';
 import 'package:sreyhan_diary/screens/moment_screen.dart';
 import 'package:sreyhan_diary/screens/word_jar_screen.dart';
 import 'package:sreyhan_diary/sound_board.dart';
@@ -180,6 +181,8 @@ void main() {
           labeler: FakeLabeler(),
           translator: FakeTranslator(),
           speaker: SilentSpeaker(),
+          // The guide has been seen, except in its own previews.
+          prefs: Prefs.memory()..setBool(seenGuideKey, true),
           now: () => now,
         ),
       ),
@@ -195,7 +198,6 @@ void main() {
   }
 
   testWidgets('screens', (tester) async {
-    SharedPreferences.setMockInitialValues({});
     await tester.runAsync(() async {
       await _loadFonts();
       tmp = Directory.systemTemp.createTempSync('diary_preview');
@@ -295,6 +297,17 @@ void main() {
 
     await pumpApp(tester, screen: const ISpyGame());
     await shot(tester, '15_ispy');
+
+    await pumpApp(tester, screen: const HowToScreen());
+    await shot(tester, '16_how_to_1');
+    for (var i = 0; i < 2; i++) {
+      await tester.tap(find.text('Next'));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    await shot(tester, '17_how_to_3');
+    await tester.tap(find.text('Next'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await shot(tester, '18_how_to_4');
 
     await tester.runAsync(() async => tmp.deleteSync(recursive: true));
   });

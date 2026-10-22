@@ -1,6 +1,7 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_channel.dart';
 
 /// The sounds in assets/sounds (made by tool/make_sounds.py).
 enum Sfx { pop, listenOn, listenOff, whoosh, shutter, sparkle, dhol, oops }
@@ -20,20 +21,18 @@ const _files = {
 /// Effects never take audio focus, so they play over the music instead of
 /// stopping it.
 class SoundBoard extends ChangeNotifier {
-  SoundBoard._(this._prefs, {this.silent = false});
+  SoundBoard(this._prefs, {this.silent = false});
 
   /// For tests and previews: remembers settings, plays nothing.
-  SoundBoard.silent() : this._(null, silent: true);
+  SoundBoard.silent() : this(Prefs.memory(), silent: true);
 
-  static Future<SoundBoard> load() async => SoundBoard._(await SharedPreferences.getInstance());
-
-  final SharedPreferences? _prefs;
+  final Prefs _prefs;
   final bool silent;
 
   static const _musicVolume = 0.35;
 
-  late bool _musicOn = _prefs?.getBool('musicOn') ?? true;
-  late bool _sfxOn = _prefs?.getBool('sfxOn') ?? true;
+  late bool _musicOn = _prefs.getBool('musicOn') ?? true;
+  late bool _sfxOn = _prefs.getBool('sfxOn') ?? true;
   bool get musicOn => _musicOn;
   bool get sfxOn => _sfxOn;
 
@@ -104,14 +103,14 @@ class SoundBoard extends ChangeNotifier {
 
   Future<void> setMusicOn(bool on) async {
     _musicOn = on;
-    await _prefs?.setBool('musicOn', on);
+    await _prefs.setBool('musicOn', on);
     notifyListeners();
     await _syncMusic();
   }
 
   Future<void> setSfxOn(bool on) async {
     _sfxOn = on;
-    await _prefs?.setBool('sfxOn', on);
+    await _prefs.setBool('sfxOn', on);
     notifyListeners();
   }
 

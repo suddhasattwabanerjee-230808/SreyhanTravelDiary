@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_channel.dart';
 import 'theme.dart';
 
 /// Names the things in a photo ("Camel", "Sky", "Sand"), on the phone, free
@@ -16,9 +17,10 @@ class DeviceLabeler implements PhotoLabeler {
   @override
   Future<List<String>> labels(String path) async {
     try {
-      return (await _channel.invokeListMethod<String>('labels', {'path': path})) ?? const [];
-    } catch (e) {
-      debugPrint('labelling failed: $e');
+      return (await _channel.invokeListMethod<String>('labels', {'path': path}).timeout(const Duration(seconds: 15))) ??
+          const [];
+    } catch (e, st) {
+      reportError('Photo labels: $e', st);
       return const [];
     }
   }

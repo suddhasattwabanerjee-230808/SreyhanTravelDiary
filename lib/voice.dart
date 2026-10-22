@@ -6,6 +6,7 @@ import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import 'app_channel.dart';
 import 'words.dart';
 
 enum VoiceReady { ready, noPermission, unavailable }
@@ -66,16 +67,17 @@ class DeviceVoiceInput implements VoiceInput {
   Future<VoiceReady> init() async {
     if (_ready == VoiceReady.ready) return _ready!;
     try {
-      final ok = await _stt.initialize(onStatus: _onStatus, onError: _onError);
+      // Never wait forever on a plugin: a hang here would freeze the mic.
+      final ok = await _stt.initialize(onStatus: _onStatus, onError: _onError).timeout(const Duration(seconds: 10));
       if (!ok) {
         final perm = await _stt.hasPermission;
         return _ready = perm ? VoiceReady.unavailable : VoiceReady.noPermission;
       }
-      _locales = (await _stt.locales()).map((l) => l.localeId).toList();
+      _locales = (await _stt.locales().timeout(const Duration(seconds: 5))).map((l) => l.localeId).toList();
       _english = _pickLocale(const ['en_in', 'en_gb', 'en_us']) ?? _pickLocale(const [], anyEnglish: true);
       return _ready = VoiceReady.ready;
-    } catch (e) {
-      debugPrint('speech init failed: $e');
+    } catch (e, st) {
+      reportError('Speech recogniser: $e', st);
       return _ready = VoiceReady.unavailable;
     }
   }

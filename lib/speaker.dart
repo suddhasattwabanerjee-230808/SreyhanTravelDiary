@@ -1,7 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+
+import 'app_channel.dart';
 
 /// Reads text aloud, telling the screen which word is being spoken so it can
 /// light up karaoke-style.
@@ -37,15 +38,21 @@ class DeviceSpeaker implements Speaker {
   @override
   Future<void> say(String text, {void Function(int start, int end)? onWord}) async {
     try {
-      await (_setup ??= _init());
+      try {
+        await (_setup ??= _init().timeout(const Duration(seconds: 5)));
+      } catch (_) {
+        // Try setting up again next time instead of staying silent for good.
+        _setup = null;
+        rethrow;
+      }
       await stop();
       _onWord = onWord;
       _done = Completer<void>();
       await _tts.speak(text);
       // Never hang a screen on a speech engine that forgets to call back.
       await _done!.future.timeout(Duration(seconds: 4 + text.length ~/ 8), onTimeout: () {});
-    } catch (e) {
-      debugPrint('tts failed: $e');
+    } catch (e, st) {
+      reportError('Speaking: $e', st);
     } finally {
       _onWord = null;
     }
