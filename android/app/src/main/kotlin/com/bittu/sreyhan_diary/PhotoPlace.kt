@@ -23,16 +23,13 @@ object PhotoPlace {
         val out = HashMap<String, Any?>()
         try {
             val exif = ExifInterface(path)
-            val spot: DoubleArray? = if (Build.VERSION.SDK_INT >= 29) {
-                exif.latLong
-            } else {
-                val f = FloatArray(2)
-                @Suppress("DEPRECATION")
-                if (exif.getLatLong(f)) doubleArrayOf(f[0].toDouble(), f[1].toDouble()) else null
-            }
-            if (spot != null) {
-                out["lat"] = spot[0]
-                out["lng"] = spot[1]
+            // The platform ExifInterface only has getLatLong(float[]); the
+            // no-argument version is AndroidX's.
+            val spot = FloatArray(2)
+            @Suppress("DEPRECATION")
+            if (exif.getLatLong(spot)) {
+                out["lat"] = spot[0].toDouble()
+                out["lng"] = spot[1].toDouble()
             }
             val taken = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
                 ?: exif.getAttribute(ExifInterface.TAG_DATETIME)
