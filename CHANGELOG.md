@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2] - 2026-10-22
+
+### Fixed
+- The sentence no longer shows up again and again after talking. When the
+  phone's speech recogniser sent the same words twice (after a pause, or
+  after the mic stopped), each copy was added as more bubbles. Now each bit
+  of speech becomes bubbles once.
+
 ## [0.4.1] - 2026-10-22
 
 ### Fixed

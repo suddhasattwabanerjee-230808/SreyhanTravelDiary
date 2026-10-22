@@ -49,9 +49,12 @@ class DeviceVoiceInput implements VoiceInput {
   VoiceReady? _ready;
 
   bool _active = false;
+
+  /// Results count only from start until stop has returned the text; the
+  /// recogniser can deliver late ones after that.
+  bool _accepting = false;
   bool _oneShot = false;
-  final _segments = <String>[];
-  String _current = '';
+  final _words = Transcript();
   void Function(String)? _onText;
   void Function(double)? _onLevel;
   VoidCallback? _onEnded;
@@ -98,7 +101,7 @@ class DeviceVoiceInput implements VoiceInput {
     return null;
   }
 
-  String get _text => joinSegments([..._segments, _current]);
+  String get _text => _words.text;
 
   @override
   Future<bool> start({
@@ -116,8 +119,8 @@ class DeviceVoiceInput implements VoiceInput {
     } else {
       _localeId = _english;
     }
-    _segments.clear();
-    _current = '';
+    _words.clear();
+    _accepting = true;
     _onText = onText;
     _onLevel = onLevel;
     _onEnded = onEnded;
@@ -148,18 +151,20 @@ class DeviceVoiceInput implements VoiceInput {
   }
 
   void _onResult(SpeechRecognitionResult r) {
-    _current = r.recognizedWords;
-    if (r.finalResult) {
-      _segments.add(_current);
-      _current = '';
-      if (!(_finished?.isCompleted ?? true)) _finished!.complete();
-    }
+    if (!_accepting) return;
+    if (_words.add(r.recognizedWords, isFinal: r.finalResult)) _completeFinished();
     _onText?.call(_text);
   }
 
+  void _completeFinished() {
+    if (!(_finished?.isCompleted ?? true)) _finished!.complete();
+  }
+
   void _onStatus(String status) {
-    if (status != SpeechToText.doneStatus && status != SpeechToText.notListeningStatus) return;
-    if (!(_finished?.isCompleted ?? true) && status == SpeechToText.doneStatus) _finished!.complete();
+    // "done" comes after the final words (or after waiting for them), so
+    // restarting then never races a late final result.
+    if (status != SpeechToText.doneStatus) return;
+    _completeFinished();
     if (!_active) return;
     if (_oneShot && _text.isNotEmpty) {
       _endedByItself();
@@ -170,7 +175,7 @@ class DeviceVoiceInput implements VoiceInput {
 
   void _onError(SpeechRecognitionError e) {
     debugPrint('speech error: ${e.errorMsg} permanent=${e.permanent}');
-    if (!(_finished?.isCompleted ?? true)) _finished!.complete();
+    _completeFinished();
     if (_active && e.errorMsg != 'error_permission') _restartSoon();
   }
 
@@ -179,7 +184,7 @@ class DeviceVoiceInput implements VoiceInput {
   }
 
   void _restartSoon() {
-    // "notListening" and "done" both arrive; restart once. Never spin: at
+    // A "done" and an error can both arrive; restart once. Never spin: at
     // most one restart every half second.
     if (_restarting) return;
     _restarting = true;
@@ -187,10 +192,7 @@ class DeviceVoiceInput implements VoiceInput {
     Future.delayed(Duration(milliseconds: wait), () async {
       _restarting = false;
       if (!_active || _stt.isListening) return;
-      if (_current.isNotEmpty) {
-        _segments.add(_current);
-        _current = '';
-      }
+      _words.keepCurrent();
       try {
         await _listen();
       } catch (e) {
@@ -208,17 +210,80 @@ class DeviceVoiceInput implements VoiceInput {
     await _stt.stop();
     // The final words arrive a moment after stopping.
     await (_finished?.future ?? Future.value()).timeout(const Duration(milliseconds: 1500), onTimeout: () {});
-    if (_current.isNotEmpty) {
-      _segments.add(_current);
-      _current = '';
-    }
+    _words.keepCurrent();
+    _accepting = false;
+    _onText = null;
     return _text;
   }
 
   @override
   Future<void> cancel() async {
     _active = false;
+    _accepting = false;
+    _onText = null;
     _cap?.cancel();
     await _stt.cancel();
+  }
+}
+
+/// The words heard in one go at the mic, across the recogniser's pauses and
+/// restarts. Android's recogniser can send the same words again after a
+/// pause (a late final, or a repeat), and this must never add them twice.
+class Transcript {
+  final _segments = <String>[];
+  String _current = '';
+
+  /// A segment kept from partial words when listening paused; its final
+  /// version may still arrive (and replaces it) or be repeated (ignored).
+  int? _provisional;
+
+  String get text => joinSegments([..._segments, _current]);
+
+  void clear() {
+    _segments.clear();
+    _current = '';
+    _provisional = null;
+  }
+
+  /// Takes one result from the recogniser; true when it was a final one.
+  bool add(String recognised, {required bool isFinal}) {
+    final words = recognised.trim();
+    final p = _provisional;
+    if (p != null && _current.isEmpty && _related(words, _segments[p])) {
+      // The paused session's words arriving late: refresh them, never add.
+      if (isFinal) {
+        if (words.isNotEmpty) _segments[p] = words;
+        _provisional = null;
+      }
+      return isFinal;
+    }
+    // New speech always arrives as partial words first, so a final with none
+    // before it that matches the last segment is the recogniser repeating itself.
+    if (isFinal && _current.isEmpty && _segments.isNotEmpty && words.toLowerCase() == _segments.last.toLowerCase()) {
+      return true;
+    }
+    if (words.isNotEmpty) _provisional = null;
+    if (isFinal) {
+      if (words.isNotEmpty) _segments.add(words);
+      _current = '';
+    } else {
+      _current = words;
+    }
+    return isFinal;
+  }
+
+  /// Keeps words heard so far that never got a final version (listening
+  /// paused or stopped).
+  void keepCurrent() {
+    if (_current.isEmpty) return;
+    _segments.add(_current);
+    _provisional = _segments.length - 1;
+    _current = '';
+  }
+
+  /// One is the start of the other: the same speech, more or less of it.
+  static bool _related(String a, String b) {
+    final x = a.toLowerCase(), y = b.toLowerCase();
+    return x.isNotEmpty && (x.startsWith(y) || y.startsWith(x));
   }
 }

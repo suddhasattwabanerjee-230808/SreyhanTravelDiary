@@ -8,6 +8,7 @@ import 'package:sreyhan_diary/models.dart';
 import 'package:sreyhan_diary/screens/word_jar_screen.dart';
 import 'package:sreyhan_diary/translate.dart';
 import 'package:sreyhan_diary/vision.dart';
+import 'package:sreyhan_diary/voice.dart';
 import 'package:sreyhan_diary/words.dart';
 
 Moment moment(String id, String text, {List<String> labels = const [], List<String> learned = const []}) => Moment(
@@ -52,6 +53,70 @@ void main() {
       final spans = wordSpans('We  saw a\ncamel!');
       expect(spans.map((s) => s.text), splitWords('We  saw a\ncamel!'));
       expect(spans.last.start, 10);
+    });
+  });
+
+  group('speech transcript', () {
+    const said = 'this is my mother she is a very nice person';
+
+    test('partials then a final make the sentence once', () {
+      final t = Transcript()
+        ..add('this is', isFinal: false)
+        ..add('this is my mother', isFinal: false)
+        ..add(said, isFinal: true);
+      expect(t.text, said);
+    });
+
+    test('a pause keeps the words; the late final replaces them, not adds', () {
+      final t = Transcript()
+        ..add('this is my mother she', isFinal: false)
+        // Listening paused and restarted before the final arrived.
+        ..keepCurrent()
+        ..add(said, isFinal: true);
+      expect(t.text, said);
+    });
+
+    test('the same final sent twice is kept once', () {
+      final t = Transcript()
+        ..add(said, isFinal: false)
+        ..keepCurrent()
+        ..add(said, isFinal: true)
+        ..add(said, isFinal: true);
+      expect(t.text, said);
+    });
+
+    test('a late partial of the paused words is ignored', () {
+      final t = Transcript()
+        ..add('this is my mother', isFinal: false)
+        ..keepCurrent()
+        ..add('this is my', isFinal: false);
+      expect(t.text, 'this is my mother');
+    });
+
+    test('saying the same sentence again (with partials) does count', () {
+      final t = Transcript()
+        ..add('hello', isFinal: false)
+        ..add('hello', isFinal: true)
+        ..add('hello', isFinal: false)
+        ..add('hello', isFinal: true);
+      expect(t.text, 'hello hello');
+    });
+
+    test('new speech after a pause is added after the kept words', () {
+      final t = Transcript()
+        ..add(said, isFinal: true)
+        ..add('I really love her', isFinal: false)
+        ..add('I really love her a lot', isFinal: true);
+      expect(t.text, '$said I really love her a lot');
+    });
+
+    test('new speech after kept partial words is added too', () {
+      final t = Transcript()
+        ..add('this is my mother', isFinal: false)
+        ..keepCurrent()
+        ..add('she is nice', isFinal: false)
+        ..add('she is nice', isFinal: true);
+      expect(t.text, 'this is my mother she is nice');
     });
   });
 

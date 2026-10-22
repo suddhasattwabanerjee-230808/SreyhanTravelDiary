@@ -167,7 +167,8 @@ class _MomentScreenState extends State<MomentScreen> {
     if (!mounted || !_listening) return;
     final ok = await _app.voice.start(
       onText: (t) {
-        if (mounted) setState(() => _live = t);
+        // Words that turn up after the mic stopped are already in the bubbles.
+        if (mounted && _listening) setState(() => _live = t);
       },
       onLevel: (l) {
         if (mounted) setState(() => _level = l);
