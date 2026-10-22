@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.5.0] - 2026-10-22
+
+### Added
+- Share my day: the green share button on a day makes a picture postcard,
+  a comic strip, or a storybook to print (this day, or the whole trip),
+  ready for WhatsApp, Drive or printing. Postcards and comics can also be
+  saved straight into the phone's photos.
+- How did you feel? Once there are words, six faces to pick from. Sheru
+  then asks "why?", to practise "I felt ... because ...". The face shows on
+  the day's page and in the storybook.
+- Tell me more: See, Hear, Smell, Touch and Taste buttons give Sheru's
+  questions for describing a photo, not just naming it.
+- Places and fun facts: the diary works out where each photo was taken
+  (from the photo itself, or where the phone is for a new photo), on the
+  phone and offline. Tap the place on the photo to hear a fun fact about
+  it: 33 Gujarat districts, 18 famous sights and 13 places around India.
+- My Passport (the Map button): a cartoon map of Gujarat where every new
+  place gets a stamp, and a page of famous-place stamps to collect.
+- Read me my day: the moon button on a day has Sheru read every page aloud,
+  turning to each one in turn.
+- Today's kite flies higher as the diary grows ("Diary day 5"); a missed
+  day never takes anything away.
+- Grown-ups' corner (hold the lock by the date for 3 seconds, then answer a
+  sum): music and sound effects switches, progress charts (words per
+  picture, describing words, new words), a backup of the whole diary as one
+  .zip, adding a backup to this phone, and deleting a day.
+- How to Use has new pages for all of these.
+
+### Changed
+- The app asks once for a rough location, only to name the place a photo
+  was taken. Nothing leaves the phone.
+
 ## [0.4.3] - 2026-10-22
 
 ### Fixed

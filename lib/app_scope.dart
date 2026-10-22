@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'app_channel.dart';
 import 'diary_store.dart';
+import 'place_finder.dart';
 import 'sound_board.dart';
 import 'speaker.dart';
 import 'translate.dart';
@@ -22,6 +23,7 @@ class App extends InheritedWidget {
     required this.labeler,
     required this.translator,
     required this.speaker,
+    required this.places,
     required this.prefs,
     this.now = DateTime.now,
     required super.child,
@@ -34,6 +36,7 @@ class App extends InheritedWidget {
   final PhotoLabeler labeler;
   final WordTranslator translator;
   final Speaker speaker;
+  final PlaceFinder places;
   final Prefs prefs;
   final DateTime Function() now;
 
@@ -47,5 +50,6 @@ class App extends InheritedWidget {
       pickPhoto != old.pickPhoto ||
       labeler != old.labeler ||
       translator != old.translator ||
-      speaker != old.speaker;
+      speaker != old.speaker ||
+      places != old.places;
 }

@@ -15,12 +15,15 @@ import '../widgets/update_card.dart';
 import 'day_screen.dart';
 import 'how_to_screen.dart';
 import 'moment_screen.dart';
+import 'parent_corner.dart';
+import 'passport_screen.dart';
 import 'word_jar_screen.dart';
 
 const childName = 'Sreyhan';
 
 /// The Sky of Kites: today's big kite to fill, and every earlier day as a
-/// kite flying behind it.
+/// kite flying behind it. Today's kite flies a little higher for every day
+/// in the diary; a missed day never takes anything away.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -100,6 +103,14 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WordJarScreen()));
   }
 
+  void _openPassport() {
+    _app.sounds.play(Sfx.whoosh);
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PassportScreen()));
+  }
+
+  /// Which diary day today is: every day with pictures, counting today.
+  int get _diaryDay => _earlier.length + 1;
+
   void _openDay(String date) {
     _app.sounds.play(Sfx.whoosh);
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DayScreen(date: date)));
@@ -126,7 +137,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           const RainbowTitle("$childName's", size: 30),
                           const RainbowTitle('Travel Diary', size: 38),
                           const SizedBox(height: 2),
-                          OutlinedTitle(prettyDate(_app.now()), size: 18, color: Gj.inkSoft, stroke: 5),
+                          Row(
+                            children: [
+                              Flexible(child: OutlinedTitle(prettyDate(_app.now()), size: 18, color: Gj.inkSoft, stroke: 5)),
+                              const SizedBox(width: 8),
+                              const GrownUpsLock(size: 34),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -145,7 +162,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                         const SizedBox(height: 10),
-                        _JarButton(count: collectWords(_days).length, onTap: _openJar),
+                        Row(
+                          children: [
+                            _JarButton(count: collectWords(_days).length, onTap: _openJar),
+                            const SizedBox(width: 8),
+                            BlobButton(icon: Icons.map_rounded, color: Gj.leaf, size: 54, label: 'Map', onTap: _openPassport),
+                          ],
+                        ),
                       ],
                     ),
                   ],
@@ -157,7 +180,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   builder: (context, box) {
                     // The big kite takes what's left after the "Today" label
                     // and the row of earlier kites, so small screens still fit.
-                    final room = box.maxHeight - 40 - (_earlier.isNotEmpty ? 150 : 0);
+                    final lift = min(_diaryDay - 1, 8) * 5.0;
+                    final room = box.maxHeight - 62 - lift - (_earlier.isNotEmpty ? 150 : 0);
                     return Column(
                       children: [
                         const Spacer(),
@@ -180,6 +204,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                         ),
                         const OutlinedTitle('Today', size: 24, color: Gj.kumkum),
+                        OutlinedTitle('Diary day $_diaryDay', size: 16, color: Gj.inkSoft, stroke: 5),
+                        SizedBox(height: lift),
                         const Spacer(),
                         if (_earlier.isNotEmpty) _earlierKites(),
                       ],

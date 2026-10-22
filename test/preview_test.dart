@@ -19,10 +19,14 @@ import 'package:sreyhan_diary/games/sentence_train_game.dart';
 import 'package:sreyhan_diary/games/which_photo_game.dart';
 import 'package:sreyhan_diary/main.dart';
 import 'package:sreyhan_diary/models.dart';
+import 'package:sreyhan_diary/place_finder.dart';
+import 'package:sreyhan_diary/places.dart';
 import 'package:sreyhan_diary/screens/day_screen.dart';
 import 'package:sreyhan_diary/screens/export_screen.dart';
 import 'package:sreyhan_diary/screens/how_to_screen.dart';
 import 'package:sreyhan_diary/screens/moment_screen.dart';
+import 'package:sreyhan_diary/screens/parent_corner.dart';
+import 'package:sreyhan_diary/screens/passport_screen.dart';
 import 'package:sreyhan_diary/screens/word_jar_screen.dart';
 import 'package:sreyhan_diary/sound_board.dart';
 import 'package:sreyhan_diary/speaker.dart';
@@ -80,6 +84,11 @@ class FakeTranslator implements WordTranslator {
   Future<bool> prepare(HomeLanguage lang) async => true;
   @override
   Future<String?> toEnglish(String text, HomeLanguage lang) async => 'hump';
+}
+
+class FakePlaces implements PlaceFinder {
+  @override
+  Future<Place?> find(String path, {required bool camera}) async => placeById('white_rann');
 }
 
 class SilentSpeaker implements Speaker {
@@ -184,6 +193,7 @@ void main() {
           labeler: FakeLabeler(),
           translator: FakeTranslator(),
           speaker: SilentSpeaker(),
+          places: FakePlaces(),
           // The guide has been seen, except in its own previews.
           prefs: Prefs.memory()..setBool(seenGuideKey, true),
           now: () => now,
@@ -239,6 +249,8 @@ void main() {
                 ['Bus', 'Tree'],
               ][(d + m) % 4],
               learned: m == 0 ? [LearnedWord(['hump', 'feather', 'sweet', 'river'][d], 'উট', 'Bengali')] : const [],
+              feeling: ['excited', 'happy', null, 'surprised'][(d + m) % 4],
+              place: ['white_rann', 'surat', 'gir', 'rani_ki_vav', 'kutch'][(d * 2 + m) % 5],
             ),
           );
         }
@@ -279,6 +291,12 @@ void main() {
     await tester.tap(find.byType(MicButton));
     await shot(tester, '8_moment_bengali');
 
+    // Below the words: faces and the five senses.
+    await tester.drag(find.byType(SingleChildScrollView).first, const Offset(0, -700));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('excited'));
+    await shot(tester, '8b_moment_ideas');
+
     await pumpApp(tester, screen: DayScreen(date: dateKey(now)));
     await shot(tester, '9_day');
 
@@ -293,6 +311,18 @@ void main() {
     await tester.tap(find.text('Comic strip'));
     await tester.pump(const Duration(milliseconds: 600));
     await shot(tester, '9d_comic');
+
+    await pumpApp(tester, screen: const PassportScreen());
+    await shot(tester, '9e_passport');
+    await tester.drag(find.byType(ListView).first, const Offset(0, -900));
+    await tester.pump(const Duration(milliseconds: 400));
+    await shot(tester, '9f_passport_stamps');
+
+    await pumpApp(tester, screen: const ParentCorner());
+    await shot(tester, '9g_grown_ups');
+    await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+    await tester.pump(const Duration(milliseconds: 400));
+    await shot(tester, '9h_grown_ups_charts');
 
     await pumpApp(tester, screen: const WordJarScreen());
     await shot(tester, '10_word_jar');
@@ -323,6 +353,14 @@ void main() {
     await tester.tap(find.text('Next'));
     await tester.pump(const Duration(milliseconds: 500));
     await shot(tester, '18_how_to_4');
+    await tester.tap(find.text('Next'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await shot(tester, '18b_how_to_say_more');
+    for (var i = 0; i < 5; i++) {
+      await tester.tap(find.text('Next'));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    await shot(tester, '18c_how_to_passport');
 
     await tester.runAsync(() async => tmp.deleteSync(recursive: true));
   });

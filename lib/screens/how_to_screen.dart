@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
+import '../feelings.dart';
+import '../places.dart';
 import '../sound_board.dart';
 import '../theme.dart';
 import '../widgets/mic_button.dart';
 import '../widgets/playful.dart';
 import '../widgets/sheru.dart';
 import '../widgets/sky.dart';
+import '../widgets/stamp.dart';
 
 /// Remembers that the guide was shown, so it opens by itself only once.
 const seenGuideKey = 'seenGuide';
@@ -47,6 +50,12 @@ final _pages = [
     () => const _Bridge(),
   ),
   _Page(
+    'Say more',
+    'Tap a face to show how you felt, and tell me why. Tap See, Hear, Smell, Touch or Taste for more ideas!',
+    Gj.lilac,
+    () => const _SayMore(),
+  ),
+  _Page(
     'Save it',
     'Tap Done. Your photo goes into your diary. Every day is a kite in the sky!',
     Gj.leaf,
@@ -61,16 +70,46 @@ final _pages = [
   ),
   _Page(
     'Read your day',
-    'Tap a kite to see that day. Tap the speaker, and I will read it to you.',
+    'Tap a kite to see that day. Tap the speaker, and I will read it to you. Tap the moon, and I will read you the whole day!',
     Gj.lilac,
     () => const Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        FlyingKite(width: 100, color: Gj.peacock, accent: Gj.leaf, child: Text('3', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: Gj.peacock))),
-        SizedBox(width: 28),
-        _Pretend(child: BlobButton(icon: Icons.volume_up_rounded, color: Gj.teal, size: 84, onTap: _nothing)),
+        FlyingKite(width: 90, color: Gj.peacock, accent: Gj.leaf, child: Text('3', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Gj.peacock))),
+        SizedBox(width: 16),
+        _Pretend(child: BlobButton(icon: Icons.volume_up_rounded, color: Gj.teal, size: 70, onTap: _nothing)),
+        SizedBox(width: 12),
+        _Pretend(child: BlobButton(icon: Icons.bedtime_rounded, color: Gj.lilac, size: 70, onTap: _nothing)),
       ],
     ),
+  ),
+  _Page(
+    'Share my day',
+    'In a day, tap the green share button. Make a postcard, a comic or a storybook, and send it to your family!',
+    Gj.leaf,
+    () => const Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _Pretend(child: BlobButton(icon: Icons.share_rounded, color: Gj.leaf, size: 84, onTap: _nothing)),
+        SizedBox(width: 18),
+        Icon(Icons.arrow_forward_rounded, color: Gj.leaf, size: 36),
+        SizedBox(width: 12),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.photo_album_rounded, color: Gj.saffron, size: 46),
+            Icon(Icons.chat_bubble_rounded, color: Gj.peacock, size: 46),
+            Icon(Icons.menu_book_rounded, color: Gj.leaf, size: 46),
+          ],
+        ),
+      ],
+    ),
+  ),
+  _Page(
+    'My Passport',
+    'Every new place you take a photo gets a stamp! Tap Map to see your stamps, and tap a stamp for a fun fact.',
+    Gj.teal,
+    () => const _Stamps(),
   ),
   _Page(
     'Word Jar',
@@ -96,6 +135,20 @@ final _pages = [
           ],
         ),
       ],
+    ),
+  ),
+  _Page(
+    'For grown-ups',
+    'Grown-ups, hold the little lock for three seconds. You can turn sounds off, see progress, and save a backup.',
+    Gj.inkSoft,
+    () => const _Pretend(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_rounded, color: Gj.inkSoft, size: 80),
+          Text('Hold for 3 seconds', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Gj.inkSoft)),
+        ],
+      ),
     ),
   ),
 ];
@@ -329,6 +382,57 @@ class _FixAWord extends StatelessWidget {
   }
 }
 
+class _SayMore extends StatelessWidget {
+  const _SayMore();
+
+  @override
+  Widget build(BuildContext context) {
+    return _Pretend(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (final f in [Feeling.happy, Feeling.excited, Feeling.surprised, Feeling.tired])
+                Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: FeelingFace(f, size: 56)),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (final s in Sense.values)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: BlobButton(icon: s.icon, color: s.color, size: 50, label: s.label, onTap: _nothing),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stamps extends StatelessWidget {
+  const _Stamps();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        PlaceStamp(placeById('gir')!, size: 100, tilt: -0.12),
+        const SizedBox(width: 6),
+        PlaceStamp(placeById('white_rann')!, size: 100, tilt: 0.08),
+        const SizedBox(width: 6),
+        PlaceStamp(placeById('rani_ki_vav')!, size: 100, inked: false, tilt: -0.04),
+      ],
+    );
+  }
+}
+
 class _Bridge extends StatelessWidget {
   const _Bridge();
 
@@ -353,7 +457,7 @@ class _Bridge extends StatelessWidget {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [chip('বাংলা', 'Bengali'), const SizedBox(width: 10), chip('हिंदी', 'Hindi')],
+          children: [Flexible(child: chip('বাংলা', 'Bengali')), const SizedBox(width: 10), Flexible(child: chip('हिंदी', 'Hindi'))],
         ),
         const SizedBox(height: 18),
         const Row(

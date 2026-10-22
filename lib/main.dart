@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'app_channel.dart';
 import 'app_scope.dart';
 import 'diary_store.dart';
+import 'place_finder.dart';
 import 'screens/home_screen.dart';
 import 'sound_board.dart';
 import 'speaker.dart';
@@ -62,6 +63,7 @@ Future<void> main() async {
         labeler: DeviceLabeler(),
         translator: DeviceTranslator(),
         speaker: DeviceSpeaker(),
+        places: DevicePlaceFinder(),
         onResumed: Updates.instance.checkIfDue,
       ),
     );
@@ -91,6 +93,7 @@ class DiaryApp extends StatefulWidget {
     required this.labeler,
     required this.translator,
     required this.speaker,
+    this.places,
     this.prefs,
     this.now = DateTime.now,
     this.onResumed,
@@ -103,6 +106,9 @@ class DiaryApp extends StatefulWidget {
   final PhotoLabeler labeler;
   final WordTranslator translator;
   final Speaker speaker;
+
+  /// Where photos were taken; previews and tests know nowhere.
+  final PlaceFinder? places;
 
   /// Saved settings; previews get ones that save nowhere.
   final Prefs? prefs;
@@ -154,6 +160,7 @@ class _DiaryAppState extends State<DiaryApp> with WidgetsBindingObserver {
       labeler: widget.labeler,
       translator: widget.translator,
       speaker: widget.speaker,
+      places: widget.places ?? const NoPlaces(),
       prefs: widget.prefs ?? _memoryPrefs,
       now: widget.now,
       child: MaterialApp(

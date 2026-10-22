@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
 import '../diary_store.dart';
+import '../feelings.dart';
 import '../models.dart';
+import '../places.dart';
 import '../sound_board.dart';
 import '../theme.dart';
 import '../translate.dart';
@@ -14,6 +16,7 @@ import '../voice.dart';
 import '../widgets/mic_button.dart';
 import '../widgets/playful.dart';
 import '../widgets/sheru.dart';
+import '../widgets/stamp.dart';
 import '../words.dart';
 
 /// Sheru's own questions, after his questions about the photo run out.
@@ -32,7 +35,9 @@ enum _Mode { words, replace, bridge }
 
 /// Add a moment: pick a photo, then talk about it while Sheru asks questions
 /// about what's in it. Words appear as bubbles; tap one to fix it with the
-/// keyboard. Say a word in Bengali or Hindi to get it in English.
+/// keyboard. Say a word in Bengali or Hindi to get it in English. Once there
+/// are words, faces and the five senses give ideas for saying more, and the
+/// photo's place (if the phone knows it) comes with a fun fact.
 class MomentScreen extends StatefulWidget {
   const MomentScreen({super.key, this.initialPhoto});
 
@@ -52,6 +57,10 @@ class _MomentScreenState extends State<MomentScreen> {
   var _labels = <String>[];
   var _questions = <String>[];
   int _prompt = 0;
+
+  // Where it was taken, and how the child felt.
+  Place? _place;
+  Feeling? _feeling;
 
   // Talking.
   var _words = <String>[];
@@ -134,7 +143,9 @@ class _MomentScreenState extends State<MomentScreen> {
       _sheruSays = null;
       _labels = [];
       _questions = [];
+      _place = null;
     });
+    _findPlace(path, source == 'camera');
     final labels = await _app.labeler.labels(path);
     if (!mounted || _photo != path) return;
     setState(() {
@@ -142,6 +153,37 @@ class _MomentScreenState extends State<MomentScreen> {
       _questions = photoQuestions(labels);
     });
   }
+
+  Future<void> _findPlace(String path, bool camera) async {
+    final place = await _app.places.find(path, camera: camera);
+    if (!mounted || _photo != path || place == null) return;
+    setState(() => _place = place);
+  }
+
+  /// Sheru says something out loud as well as in his bubble.
+  void _tell(String text) {
+    if (_listening) return;
+    _commitEdit();
+    setState(() => _sheruSays = text);
+    unawaited(_app.speaker.say(text));
+  }
+
+  void _tellPlace() {
+    final p = _place;
+    if (p != null) _tell('${p.name}! ${p.fact}');
+  }
+
+  void _pickFeeling(Feeling f) {
+    _app.sounds.play(Sfx.pop);
+    if (_feeling == f) {
+      setState(() => _feeling = null);
+      return;
+    }
+    setState(() => _feeling = f);
+    _tell(f.why);
+  }
+
+  void _askSense(Sense s) => _tell(s.question);
 
   // --- Listening --------------------------------------------------------------
 
@@ -356,6 +398,12 @@ class _MomentScreenState extends State<MomentScreen> {
     setState(() => _busy = true);
     await _app.speaker.stop();
     final store = _app.store;
+    // Somewhere not stamped before earns a new stamp in the passport.
+    final before = passportStamps([
+      for (final d in await store.allDays())
+        for (final m in d.moments) ?m.place,
+    ]);
+    final newStamp = _place != null && !before.contains(_place!.id);
     final photo = await store.importPhoto(_photo!, _id);
     await store.addMoment(
       Moment(
@@ -366,6 +414,8 @@ class _MomentScreenState extends State<MomentScreen> {
         labels: _labels,
         learned: List.of(_learned),
         source: _source,
+        feeling: _feeling?.name,
+        place: _place?.id,
       ),
     );
     if (!mounted) return;
@@ -373,9 +423,11 @@ class _MomentScreenState extends State<MomentScreen> {
     ConfettiBurst.show(context);
     setState(() {
       _celebrating = true;
-      _sheruSays = "Well done! It's in your diary!";
+      _sheruSays = newStamp
+          ? 'Well done! And a new stamp in your passport: ${_place!.name}!'
+          : "Well done! It's in your diary!";
     });
-    await Future.delayed(const Duration(milliseconds: 1800));
+    await Future.delayed(Duration(milliseconds: newStamp ? 2600 : 1800));
     if (mounted) Navigator.of(context).pop(true);
   }
 
@@ -491,6 +543,10 @@ class _MomentScreenState extends State<MomentScreen> {
                 if (_bridged != null) ...[const SizedBox(height: 10), _bridgeCard()],
                 const SizedBox(height: 12),
                 _wordBoard(),
+                if (_words.isNotEmpty && !_listening && _editing == null && !_celebrating) ...[
+                  const SizedBox(height: 14),
+                  _TalkIdeas(feeling: _feeling, onFeeling: _pickFeeling, onSense: _askSense),
+                ],
               ],
             ),
           ),
@@ -529,6 +585,16 @@ class _MomentScreenState extends State<MomentScreen> {
             child: Polaroid(image: FileImage(File(_photo!)), tilt: -0.03),
           ),
         ),
+        if (_place != null)
+          Positioned(
+            left: 0,
+            bottom: -12,
+            right: 60,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: PlacePill(_place!, size: 17, onTap: _tellPlace),
+            ),
+          ),
         if (!_listening && !_celebrating && _editing == null)
           Positioned(
             right: -6,
@@ -691,6 +757,95 @@ class _MomentScreenState extends State<MomentScreen> {
                   if (_mode == _Mode.bridge && live.isNotEmpty) WordBubble(word: live.join(' '), color: Gj.teal, live: true),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+/// Ideas for saying more: how it felt (a face to pick, then "why?") and the
+/// five senses.
+class _TalkIdeas extends StatelessWidget {
+  const _TalkIdeas({required this.feeling, required this.onFeeling, required this.onSense});
+  final Feeling? feeling;
+  final void Function(Feeling) onFeeling;
+  final void Function(Sense) onSense;
+
+  @override
+  Widget build(BuildContext context) {
+    const label = TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Gj.inkSoft, height: 1.1);
+    const small = TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Gj.inkSoft, height: 1.1);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: Gj.lilac.withValues(alpha: 0.6), width: 3),
+      ),
+      child: Column(
+        children: [
+          const Text('How did you feel?', style: label),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              for (final f in Feeling.values)
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    selected: feeling == f,
+                    label: f.word,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onFeeling(f),
+                      child: Column(
+                        children: [
+                          AnimatedScale(
+                            scale: feeling == f ? 1.18 : (feeling == null ? 1 : 0.86),
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOutBack,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: feeling == f ? Gj.edge(f.color) : Colors.transparent,
+                                  width: 3,
+                                ),
+                              ),
+                              child: FeelingFace(f, size: 40),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              f.word,
+                              style: small.copyWith(color: feeling == f ? Gj.edge(f.color) : Gj.inkSoft),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Text('Tell me more!', style: label),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              for (final s in Sense.values)
+                Expanded(
+                  child: Center(
+                    child: BlobButton(icon: s.icon, color: s.color, size: 46, label: s.label, onTap: () => onSense(s)),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

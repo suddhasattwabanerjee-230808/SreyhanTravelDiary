@@ -27,6 +27,8 @@ class Moment {
     this.labels = const [],
     this.learned = const [],
     this.source = 'camera',
+    this.feeling,
+    this.place,
   });
 
   final String id;
@@ -47,6 +49,12 @@ class Moment {
   /// 'camera' or 'gallery'.
   final String source;
 
+  /// How the child felt, a [Feeling] name ('happy', 'excited'...), if picked.
+  final String? feeling;
+
+  /// Where the photo was taken, a place id from places.dart, if known.
+  final String? place;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'createdAt': createdAt.toIso8601String(),
@@ -55,6 +63,8 @@ class Moment {
     if (labels.isNotEmpty) 'labels': labels,
     if (learned.isNotEmpty) 'learned': [for (final w in learned) w.toJson()],
     'source': source,
+    'feeling': ?feeling,
+    'place': ?place,
   };
 
   factory Moment.fromJson(Map<String, dynamic> j) => Moment(
@@ -65,6 +75,8 @@ class Moment {
     labels: [for (final l in (j['labels'] as List? ?? const [])) l as String],
     learned: [for (final w in (j['learned'] as List? ?? const [])) LearnedWord.fromJson(w as Map<String, dynamic>)],
     source: (j['source'] as String?) ?? 'camera',
+    feeling: j['feeling'] as String?,
+    place: j['place'] as String?,
   );
 }
 

@@ -90,6 +90,19 @@ class DiaryStore extends ChangeNotifier {
     await saveDay(d.copyWith(moments: [...d.moments, m]));
   }
 
+  /// A whole day, with its photos (grown-ups' corner).
+  Future<void> deleteDay(String date) async {
+    final d = await day(date);
+    final f = File('${_days.path}/$date.json');
+    if (await f.exists()) await f.delete();
+    _cache.remove(date);
+    for (final m in d.moments) {
+      final p = file(m.photo);
+      if (await p.exists()) await p.delete();
+    }
+    notifyListeners();
+  }
+
   Future<void> deleteMoment(String date, String id) async {
     final d = await day(date);
     final gone = d.moments.where((m) => m.id == id).toList();

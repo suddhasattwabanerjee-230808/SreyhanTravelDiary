@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -208,6 +209,7 @@ class _PictureScreenState extends State<_PictureScreen> {
   DiaryDay? _day;
   bool _ready = false;
   bool _sharing = false;
+  bool _saved = false;
 
   App get _app => App.of(context);
 
@@ -228,22 +230,37 @@ class _PictureScreenState extends State<_PictureScreen> {
 
   ImageProvider _photoOf(Moment m) => FileImage(File(_app.store.file(m.photo).path));
 
+  String get _what => widget.kind == _Picture.postcard ? 'postcard' : 'comic';
+
+  Future<Uint8List> _png() async {
+    final boundary = _frame.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage(pixelRatio: 3);
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    return png!.buffer.asUint8List();
+  }
+
   Future<void> _share() async {
     setState(() => _sharing = true);
     try {
-      final boundary = _frame.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3);
-      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      final png = await _png();
       _app.sounds.play(Sfx.sparkle);
-      final what = widget.kind == _Picture.postcard ? 'postcard' : 'comic';
-      await Sharer.shareBytes(
-        png!.buffer.asUint8List(),
-        '${exportName(what, widget.date)}.png',
-        mime: 'image/png',
-        title: "$childName's $what",
-      );
+      await Sharer.shareBytes(png, '${exportName(_what, widget.date)}.png', mime: 'image/png', title: "$childName's $_what");
     } catch (e, st) {
       reportError('Sharing a picture: $e', st);
+    }
+    if (mounted) setState(() => _sharing = false);
+  }
+
+  /// Into the phone's gallery, in a "Sreyhan Diary" album.
+  Future<void> _save() async {
+    setState(() => _sharing = true);
+    try {
+      await Sharer.saveToGallery(await _png(), '${exportName(_what, widget.date)}-${DateTime.now().millisecondsSinceEpoch}.png');
+      _app.sounds.play(Sfx.dhol);
+      if (mounted) setState(() => _saved = true);
+    } catch (e, st) {
+      reportError('Saving a picture: $e', st);
+      _app.sounds.play(Sfx.oops);
     }
     if (mounted) setState(() => _sharing = false);
   }
@@ -297,11 +314,26 @@ class _PictureScreenState extends State<_PictureScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                child: KutchButton(
-                  label: _sharing ? 'Getting it ready...' : (_ready ? 'Share it' : 'Loading photos...'),
-                  icon: Icons.share_rounded,
-                  color: Gj.leaf,
-                  onTap: _ready && !_sharing ? _share : null,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: KutchButton(
+                        label: _sharing ? 'Getting it ready...' : (_ready ? 'Share it' : 'Loading photos...'),
+                        icon: Icons.share_rounded,
+                        color: Gj.leaf,
+                        onTap: _ready && !_sharing ? _share : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    BlobButton(
+                      icon: _saved ? Icons.check_rounded : Icons.download_rounded,
+                      color: Gj.peacock,
+                      size: 62,
+                      label: _saved ? 'Saved!' : 'My photos',
+                      onTap: _ready && !_sharing && !_saved ? _save : null,
+                    ),
+                  ],
                 ),
               ),
             ],

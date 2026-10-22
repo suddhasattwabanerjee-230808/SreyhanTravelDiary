@@ -7,7 +7,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../diary_store.dart';
+import '../feelings.dart';
 import '../models.dart';
+import '../places.dart';
 import '../widgets/sheru.dart';
 
 const _maroon = PdfColor.fromInt(0xFF8E1B3A);
@@ -29,6 +31,7 @@ Future<Uint8List> buildStorybook(DiaryStore store, List<DiaryDay> days, {require
   final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/Baloo2-600.ttf'));
   final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/Baloo2-800.ttf'));
   final sheru = pw.MemoryImage(await paintToPng(SheruPainter(), 240));
+  final faces = {for (final f in Feeling.values) f: pw.MemoryImage(await paintToPng(FacePainter(f), 96))};
   final doc = pw.Document(
     title: "$childName's Travel Diary",
     author: childName,
@@ -92,11 +95,24 @@ Future<Uint8List> buildStorybook(DiaryStore store, List<DiaryDay> days, {require
                   style: pw.TextStyle(font: bold, fontSize: 13, color: _saffron),
                 ),
               ],
+              if (Feeling.byName(m.feeling) case final f?) ...[
+                pw.SizedBox(height: 12),
+                pw.Row(
+                  children: [
+                    pw.SizedBox(width: 26, height: 26, child: pw.Image(faces[f]!)),
+                    pw.SizedBox(width: 8),
+                    pw.Text('I felt ${f.word}', style: pw.TextStyle(font: bold, fontSize: 14, color: _ink)),
+                  ],
+                ),
+              ],
               pw.Spacer(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text(_time(m.createdAt), style: const pw.TextStyle(fontSize: 11, color: _soft)),
+                  pw.Text(
+                    [_time(m.createdAt), ?placeById(m.place)?.name].join('  ·  '),
+                    style: const pw.TextStyle(fontSize: 11, color: _soft),
+                  ),
                   pw.Text('$page', style: const pw.TextStyle(fontSize: 11, color: _soft)),
                 ],
               ),

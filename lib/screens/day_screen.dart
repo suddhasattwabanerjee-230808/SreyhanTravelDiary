@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
 import '../diary_store.dart';
+import '../feelings.dart';
 import '../models.dart';
+import '../places.dart';
 import '../sound_board.dart';
 import '../theme.dart';
 import '../widgets/playful.dart';
 import '../widgets/sentence_view.dart';
 import '../widgets/sheru.dart';
+import '../widgets/stamp.dart';
+import 'home_screen.dart' show childName;
 import 'export_screen.dart';
 import 'moment_screen.dart';
 
 /// One diary day as a scrapbook: each moment a taped-in photo with the
-/// child's words underneath.
+/// child's words underneath. "Read me my day" has Sheru read every page
+/// aloud, turning to each in turn.
 class DayScreen extends StatefulWidget {
   const DayScreen({super.key, required this.date});
   final String date;
@@ -24,6 +29,13 @@ class DayScreen extends StatefulWidget {
 class _DayScreenState extends State<DayScreen> {
   DiaryDay? _day;
   DiaryStore? _store;
+
+  // Reading aloud: which moment, which word, and whether the whole day is
+  // being read.
+  int? _readingAt;
+  (int, int)? _span;
+  bool _replaying = false;
+  final _keys = <String, GlobalKey>{};
 
   App get _app => App.of(context);
 
@@ -39,9 +51,80 @@ class _DayScreenState extends State<DayScreen> {
   }
 
   @override
+  void deactivate() {
+    if (_readingAt != null) {
+      _replaying = false;
+      _app.speaker.stop();
+      _app.sounds.unhush();
+    }
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _store?.removeListener(_load);
     super.dispose();
+  }
+
+  /// Turns to moment [i] and reads it, lighting up each word.
+  Future<void> _read(int i) async {
+    final m = _day!.moments[i];
+    setState(() {
+      _readingAt = i;
+      _span = null;
+    });
+    final ctx = _keys[m.id]?.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(ctx, alignment: 0.12, duration: const Duration(milliseconds: 600), curve: Curves.easeInOutCubic);
+    }
+    if (!mounted) return;
+    await _app.speaker.say(
+      m.text,
+      onWord: (start, end) {
+        if (mounted && _readingAt == i) setState(() => _span = (start, end));
+      },
+    );
+  }
+
+  Future<void> _hear(int i) async {
+    if (_readingAt != null) return;
+    await _app.sounds.hush();
+    await _read(i);
+    await _app.sounds.unhush();
+    if (mounted) setState(() => _readingAt = null);
+  }
+
+  /// Bedtime replay: the whole day, page by page. Tap again to stop.
+  Future<void> _readDay() async {
+    if (_replaying) {
+      _replaying = false;
+      await _app.speaker.stop();
+      return;
+    }
+    final day = _day;
+    if (day == null || day.isEmpty || _readingAt != null) return;
+    setState(() {
+      _replaying = true;
+      _readingAt = 0;
+    });
+    await _app.sounds.hush();
+    await _app.speaker.say(_isToday ? 'Here is your day today!' : 'Here is your day. ${prettyDate(day.day)}.');
+    for (var i = 0; i < day.moments.length && _replaying && mounted; i++) {
+      if (i > 0) _app.sounds.play(Sfx.whoosh);
+      await _read(i);
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    if (_replaying && mounted) {
+      _app.sounds.play(Sfx.sparkle);
+      await _app.speaker.say('The end! Well done, $childName.');
+    }
+    await _app.sounds.unhush();
+    if (mounted) {
+      setState(() {
+        _replaying = false;
+        _readingAt = null;
+      });
+    }
   }
 
   Future<void> _load() async {
@@ -81,18 +164,29 @@ class _DayScreenState extends State<DayScreen> {
                       onTap: () => Navigator.of(context).pop(),
                     ),
                     Expanded(
-                      child: Center(
-                        child: OutlinedTitle(
-                          _isToday ? 'My day today' : prettyDate(DateTime.parse(widget.date)),
-                          size: _isToday ? 30 : 24,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: OutlinedTitle(
+                            _isToday ? 'My day today' : prettyDate(DateTime.parse(widget.date)),
+                            size: _isToday ? 30 : 24,
+                          ),
                         ),
                       ),
                     ),
+                    BlobButton(
+                      icon: _replaying ? Icons.stop_rounded : Icons.bedtime_rounded,
+                      color: Gj.lilac,
+                      size: 52,
+                      onTap: day == null || day.isEmpty || (_readingAt != null && !_replaying) ? null : _readDay,
+                    ),
+                    const SizedBox(width: 6),
                     // Share my day: a storybook, postcard or comic.
                     BlobButton(
                       icon: Icons.share_rounded,
                       color: Gj.leaf,
-                      size: 56,
+                      size: 52,
                       onTap: day == null || day.isEmpty
                           ? null
                           : () => Navigator.of(
@@ -112,16 +206,25 @@ class _DayScreenState extends State<DayScreen> {
                           child: SheruSays('No pictures yet. Let\'s add one!', size: 110),
                         ),
                       )
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(30, 20, 30, 24),
-                        itemCount: day.moments.length,
-                        itemBuilder: (context, i) => Padding(
-                          padding: const EdgeInsets.only(bottom: 34),
-                          child: _MomentPage(
-                            moment: day.moments[i],
-                            index: i,
-                            onLongPress: () => _delete(day.moments[i]),
-                          ),
+                    // Every page built at once, so reading aloud can turn to any of them.
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(30, 12, 30, 24),
+                        child: Column(
+                          children: [
+                            _DayPlaces(day: day, onTap: (p) => _app.speaker.say('${p.name}! ${p.fact}')),
+                            for (final (i, m) in day.moments.indexed)
+                              Padding(
+                                key: _keys.putIfAbsent(m.id, GlobalKey.new),
+                                padding: const EdgeInsets.only(top: 12, bottom: 22),
+                                child: _MomentPage(
+                                  moment: m,
+                                  index: i,
+                                  speaking: _readingAt == i ? (_span ?? (0, 0)) : null,
+                                  onHear: _readingAt == null ? () => _hear(i) : null,
+                                  onLongPress: () => _delete(m),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
               ),
@@ -138,74 +241,110 @@ class _DayScreenState extends State<DayScreen> {
   }
 }
 
-class _MomentPage extends StatefulWidget {
-  const _MomentPage({required this.moment, required this.index, required this.onLongPress});
+/// The places this day's photos were taken, as pins to tap for their fact.
+class _DayPlaces extends StatelessWidget {
+  const _DayPlaces({required this.day, required this.onTap});
+  final DiaryDay day;
+  final void Function(Place) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final places = {for (final m in day.moments) ?placeById(m.place)};
+    if (places.isEmpty) return const SizedBox();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        alignment: WrapAlignment.center,
+        children: [for (final p in places) PlacePill(p, onTap: () => onTap(p))],
+      ),
+    );
+  }
+}
+
+class _MomentPage extends StatelessWidget {
+  const _MomentPage({
+    required this.moment,
+    required this.index,
+    required this.speaking,
+    required this.onHear,
+    required this.onLongPress,
+  });
 
   final Moment moment;
   final int index;
+
+  /// The word being read aloud, if this page is.
+  final (int, int)? speaking;
+  final VoidCallback? onHear;
   final VoidCallback onLongPress;
-
-  @override
-  State<_MomentPage> createState() => _MomentPageState();
-}
-
-class _MomentPageState extends State<_MomentPage> {
-  (int, int)? _speaking;
-
-  Future<void> _hear() async {
-    final app = App.of(context);
-    await app.sounds.hush();
-    await app.speaker.say(
-      widget.moment.text,
-      onWord: (start, end) {
-        if (mounted) setState(() => _speaking = (start, end));
-      },
-    );
-    await app.sounds.unhush();
-    if (mounted) setState(() => _speaking = null);
-  }
 
   @override
   Widget build(BuildContext context) {
     final app = App.of(context);
-    final m = widget.moment;
-    final tilt = widget.index.isEven ? -0.025 : 0.03;
+    final m = moment;
+    final tilt = index.isEven ? -0.025 : 0.03;
     final time = TimeOfDay.fromDateTime(m.createdAt).format(context);
+    final feeling = Feeling.byName(m.feeling);
+    final place = placeById(m.place);
     return GestureDetector(
-      onLongPress: widget.onLongPress,
-      child: Polaroid(
-        image: FileImage(app.store.file(m.photo)),
-        tilt: tilt,
-        tapeColor: Gj.festive[widget.index % Gj.festive.length],
-        caption: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: SentenceView(text: m.text, learned: m.learned, speaking: _speaking, size: 22)),
-                const SizedBox(width: 8),
-                BlobButton(
-                  icon: Icons.volume_up_rounded,
-                  color: Gj.teal,
-                  size: 50,
-                  onTap: _speaking == null ? _hear : null,
+      onLongPress: onLongPress,
+      child: AnimatedScale(
+        scale: speaking != null ? 1.03 : 1,
+        duration: const Duration(milliseconds: 300),
+        child: Polaroid(
+          image: FileImage(app.store.file(m.photo)),
+          tilt: tilt,
+          tapeColor: Gj.festive[index % Gj.festive.length],
+          caption: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: SentenceView(text: m.text, learned: m.learned, speaking: speaking, size: 22)),
+                  const SizedBox(width: 8),
+                  BlobButton(icon: Icons.volume_up_rounded, color: Gj.teal, size: 50, onTap: onHear),
+                ],
+              ),
+              if (m.learned.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final w in m.learned) LearnedWordChip(word: w, onTap: () => app.speaker.say(w.word)),
+                  ],
                 ),
               ],
-            ),
-            if (m.learned.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
+              const SizedBox(height: 6),
+              Row(
                 children: [
-                  for (final w in m.learned) LearnedWordChip(word: w, onTap: () => app.speaker.say(w.word)),
+                  Text(time, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Gj.inkSoft)),
+                  if (place != null) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        '· ${place.name}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Gj.edge(place.color)),
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  if (feeling != null)
+                    Tooltip(
+                      message: 'I felt ${feeling.word}',
+                      child: GestureDetector(
+                        onTap: () => app.speaker.say('I felt ${feeling.word}!'),
+                        child: FeelingFace(feeling, size: 40),
+                      ),
+                    ),
                 ],
               ),
             ],
-            const SizedBox(height: 6),
-            Text(time, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Gj.inkSoft)),
-          ],
+          ),
         ),
       ),
     );
