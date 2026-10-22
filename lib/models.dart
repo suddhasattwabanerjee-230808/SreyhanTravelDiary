@@ -1,3 +1,14 @@
+/// A word Sheru taught, with a child-friendly meaning.
+class NewWord {
+  const NewWord(this.word, this.meaning);
+  final String word;
+  final String meaning;
+
+  Map<String, dynamic> toJson() => {'word': word, 'meaning': meaning};
+
+  factory NewWord.fromJson(Map<String, dynamic> j) => NewWord(j['word'] as String, (j['meaning'] as String?) ?? '');
+}
+
 /// One photo and what the child said about it.
 class Moment {
   const Moment({
@@ -5,6 +16,9 @@ class Moment {
     required this.createdAt,
     required this.photo,
     required this.text,
+    this.superSentence,
+    this.newWords = const [],
+    this.stars = 0,
     this.source = 'camera',
   });
 
@@ -13,24 +27,31 @@ class Moment {
 
   /// Paths are relative to the diary folder, so a backup can move phones.
   final String photo;
+
+  /// The child's own words.
   final String text;
+
+  /// Sheru's polished version of [text], which the child read back.
+  final String? superSentence;
+  final List<NewWord> newWords;
+
+  /// 0 to 3, for reading the Super Sentence aloud.
+  final int stars;
 
   /// 'camera' or 'gallery'.
   final String source;
 
-  Moment copyWith({String? text, String? photo}) => Moment(
-    id: id,
-    createdAt: createdAt,
-    photo: photo ?? this.photo,
-    text: text ?? this.text,
-    source: source,
-  );
+  /// What the diary page shows: the Super Sentence when there is one.
+  String get pageText => superSentence ?? text;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'createdAt': createdAt.toIso8601String(),
     'photo': photo,
     'text': text,
+    if (superSentence != null) 'superSentence': superSentence,
+    if (newWords.isNotEmpty) 'newWords': [for (final w in newWords) w.toJson()],
+    if (stars > 0) 'stars': stars,
     'source': source,
   };
 
@@ -39,6 +60,9 @@ class Moment {
     createdAt: DateTime.parse(j['createdAt'] as String),
     photo: j['photo'] as String,
     text: (j['text'] as String?) ?? '',
+    superSentence: j['superSentence'] as String?,
+    newWords: [for (final w in (j['newWords'] as List? ?? const [])) NewWord.fromJson(w as Map<String, dynamic>)],
+    stars: (j['stars'] as num?)?.toInt() ?? 0,
     source: (j['source'] as String?) ?? 'camera',
   );
 }

@@ -11,21 +11,24 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sreyhan_diary/coach.dart';
 import 'package:sreyhan_diary/diary_store.dart';
 import 'package:sreyhan_diary/main.dart';
 import 'package:sreyhan_diary/models.dart';
 import 'package:sreyhan_diary/screens/day_screen.dart';
 import 'package:sreyhan_diary/screens/moment_screen.dart';
+import 'package:sreyhan_diary/screens/word_jar_screen.dart';
 import 'package:sreyhan_diary/sound_board.dart';
+import 'package:sreyhan_diary/speaker.dart';
 import 'package:sreyhan_diary/voice.dart';
 import 'package:sreyhan_diary/widgets/mic_button.dart';
 
 const outDir = String.fromEnvironment('PREVIEW_DIR');
 
-/// Says the same sentence every time.
+/// Says [sentence] every time (the first words live, all of it on stop).
 class FakeVoice implements VoiceInput {
   FakeVoice(this.sentence);
-  final String sentence;
+  String sentence;
   bool _on = false;
 
   @override
@@ -38,6 +41,7 @@ class FakeVoice implements VoiceInput {
     void Function(double level)? onLevel,
     bool oneShot = false,
     VoidCallback? onEnded,
+    List<String>? languages,
   }) async {
     _on = true;
     onText(sentence.split(' ').take(3).join(' '));
@@ -53,6 +57,31 @@ class FakeVoice implements VoiceInput {
 
   @override
   Future<void> cancel() async => _on = false;
+}
+
+const superSentence = 'I saw a tall brown camel resting in the sparkly white desert.';
+
+class FakeCoach implements Coach {
+  @override
+  bool get online => true;
+  @override
+  Future<CoachQuestions?> ask(String photoPath, String said) async =>
+      const CoachQuestions('Wow, a camel in the desert!', ['What colour was its saddle?', 'Was the sand hot?']);
+  @override
+  Future<SuperSentence?> polish(String photoPath, String said) async => const SuperSentence(
+    sentences: [superSentence],
+    praise: 'Super describing!',
+    newWords: [NewWord('resting', 'taking a break'), NewWord('sparkly', 'shining with little lights')],
+  );
+  @override
+  Future<BridgeWord?> bridge(String said) async => const BridgeWord('camel', 'A camel has a hump.');
+}
+
+class SilentSpeaker implements Speaker {
+  @override
+  Future<void> say(String text, {void Function(int start, int end)? onWord}) async {}
+  @override
+  Future<void> stop() async {}
 }
 
 Future<void> _loadFonts() async {
@@ -131,7 +160,10 @@ void main() {
     });
   }
 
+  late FakeVoice voice;
+
   Future<void> pumpApp(WidgetTester tester, {Widget? screen, String? sentence}) async {
+    voice = FakeVoice(sentence ?? 'we saw a big brown camel in the white desert');
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 2.75;
     await tester.pumpWidget(
@@ -140,16 +172,21 @@ void main() {
         child: DiaryApp(
           store: store,
           sounds: SoundBoard.silent(),
-          voice: FakeVoice(sentence ?? 'we saw a big brown camel in the white desert'),
+          voice: voice,
           pickPhoto: ({required bool camera}) async => photos.first,
+          coach: FakeCoach(),
+          speaker: SilentSpeaker(),
           now: () => now,
         ),
       ),
     );
     if (screen != null) {
       final nav = tester.state<NavigatorState>(find.byType(Navigator));
-      nav.push(MaterialPageRoute<void>(builder: (_) => screen));
-      await tester.pump(const Duration(milliseconds: 600));
+      // Pushed with real async running, so the screen's file reads can finish.
+      await tester.runAsync(() async {
+        nav.push(MaterialPageRoute<void>(builder: (_) => screen));
+        await tester.pump(const Duration(milliseconds: 600));
+      });
     }
   }
 
@@ -186,6 +223,9 @@ void main() {
               createdAt: now.subtract(Duration(days: d * (d + 1), hours: m * 3)),
               photo: await store.importPhoto(photos[(d + m) % photos.length], id),
               text: texts[(d + m) % texts.length],
+              superSentence: m == 0 ? superSentence : null,
+              newWords: m == 0 ? [NewWord(['resting', 'sparkly', 'gigantic', 'graceful'][d], 'a word Sheru taught')] : const [],
+              stars: m == 0 ? 3 - d % 3 : 0,
             ),
           );
         }
@@ -205,16 +245,32 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
     await shot(tester, '5_moment_listening');
 
-    // Tap again: done, all the words as bubbles.
+    // Tap again: done, all the words as bubbles, and Sheru asks about the photo.
     await tester.tap(find.byType(MicButton));
     await shot(tester, '6_moment_words');
 
     // Tap a word to fix it.
     await tester.tap(find.text('camel').first);
     await shot(tester, '7_moment_fix_word');
+    await tester.tap(find.text('Keep'));
+    await tester.pump();
+
+    // Done: the Super Sentence.
+    await tester.tap(find.text('Done'));
+    await shot(tester, '8_super_sentence');
+
+    // Read it back: all the words go green, three stars.
+    voice.sentence = superSentence;
+    await tester.tap(find.byType(MicButton));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    await tester.tap(find.byType(MicButton));
+    await shot(tester, '9_read_back');
 
     await pumpApp(tester, screen: DayScreen(date: dateKey(now)));
-    await shot(tester, '8_day');
+    await shot(tester, '10_day');
+
+    await pumpApp(tester, screen: const WordJarScreen());
+    await shot(tester, '11_word_jar');
 
     await tester.runAsync(() async => tmp.deleteSync(recursive: true));
   });

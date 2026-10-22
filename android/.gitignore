@@ -12,3 +12,5 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# Except the shared debug-grade key every build is signed with (see app/build.gradle.kts).
+!app/sreyhan-debug.keystore

@@ -6,6 +6,7 @@ import '../models.dart';
 import '../sound_board.dart';
 import '../theme.dart';
 import '../widgets/playful.dart';
+import '../widgets/sentence_view.dart';
 import '../widgets/sheru.dart';
 import 'moment_screen.dart';
 
@@ -126,7 +127,7 @@ class _DayScreenState extends State<DayScreen> {
   }
 }
 
-class _MomentPage extends StatelessWidget {
+class _MomentPage extends StatefulWidget {
   const _MomentPage({required this.moment, required this.index, required this.onLongPress});
 
   final Moment moment;
@@ -134,24 +135,79 @@ class _MomentPage extends StatelessWidget {
   final VoidCallback onLongPress;
 
   @override
+  State<_MomentPage> createState() => _MomentPageState();
+}
+
+class _MomentPageState extends State<_MomentPage> {
+  (int, int)? _speaking;
+
+  Future<void> _hear() async {
+    final app = App.of(context);
+    await app.sounds.hush();
+    await app.speaker.say(
+      widget.moment.pageText,
+      onWord: (start, end) {
+        if (mounted) setState(() => _speaking = (start, end));
+      },
+    );
+    await app.sounds.unhush();
+    if (mounted) setState(() => _speaking = null);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final store = App.of(context).store;
-    final tilt = index.isEven ? -0.025 : 0.03;
-    final time = TimeOfDay.fromDateTime(moment.createdAt).format(context);
+    final app = App.of(context);
+    final m = widget.moment;
+    final tilt = widget.index.isEven ? -0.025 : 0.03;
+    final time = TimeOfDay.fromDateTime(m.createdAt).format(context);
     return GestureDetector(
-      onLongPress: onLongPress,
+      onLongPress: widget.onLongPress,
       child: Polaroid(
-        image: FileImage(store.file(moment.photo)),
+        image: FileImage(app.store.file(m.photo)),
         tilt: tilt,
-        tapeColor: Gj.festive[index % Gj.festive.length],
+        tapeColor: Gj.festive[widget.index % Gj.festive.length],
         caption: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              moment.text,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, height: 1.2, color: Gj.ink),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: SentenceView(text: m.pageText, newWords: m.newWords, speaking: _speaking, size: 22)),
+                const SizedBox(width: 8),
+                BlobButton(
+                  icon: Icons.volume_up_rounded,
+                  color: Gj.teal,
+                  size: 50,
+                  onTap: _speaking == null ? _hear : null,
+                ),
+              ],
             ),
-            Text(time, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Gj.inkSoft)),
+            if (m.superSentence != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'In my words: ${m.text}',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Gj.inkSoft, height: 1.2),
+              ),
+            ],
+            if (m.newWords.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final w in m.newWords)
+                    NewWordChip(word: w, onTap: () => app.speaker.say(w.meaning.isEmpty ? w.word : '${w.word}. ${w.meaning}')),
+                ],
+              ),
+            ],
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Text(time, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Gj.inkSoft)),
+                const Spacer(),
+                if (m.stars > 0) StarRow(m.stars, size: 24),
+              ],
+            ),
           ],
         ),
       ),

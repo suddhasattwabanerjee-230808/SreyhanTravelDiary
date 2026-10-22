@@ -1,7 +1,9 @@
 import 'package:flutter/widgets.dart';
 
+import 'coach.dart';
 import 'diary_store.dart';
 import 'sound_board.dart';
+import 'speaker.dart';
 import 'voice.dart';
 
 /// Picks a photo and returns its path, or null if the child backed out.
@@ -15,6 +17,8 @@ class App extends InheritedWidget {
     required this.sounds,
     required this.voice,
     required this.pickPhoto,
+    required this.coach,
+    required this.speaker,
     this.now = DateTime.now,
     required super.child,
   });
@@ -23,11 +27,18 @@ class App extends InheritedWidget {
   final SoundBoard sounds;
   final VoiceInput voice;
   final PhotoPicker pickPhoto;
+  final Coach coach;
+  final Speaker speaker;
   final DateTime Function() now;
 
   static App of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<App>()!;
 
   @override
   bool updateShouldNotify(App old) =>
-      store != old.store || sounds != old.sounds || voice != old.voice || pickPhoto != old.pickPhoto;
+      store != old.store ||
+      sounds != old.sounds ||
+      voice != old.voice ||
+      pickPhoto != old.pickPhoto ||
+      coach != old.coach ||
+      speaker != old.speaker;
 }

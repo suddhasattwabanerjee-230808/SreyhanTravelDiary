@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Publishing the APK to the Releases page needs write access.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,6 +24,7 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      - run: node coach-worker/test.mjs
 
       # The NDK download from Google sometimes arrives cut short ("unknown
       # archive"), failing the build; fetch it first, retrying.
@@ -32,11 +37,30 @@ jobs:
           exit 1
 
       # The phone can't build APKs itself (the Android build tools are x86
-      # only), so this is where the installable debug APK comes from.
-      - run: flutter build apk --debug --target-platform android-arm64
+      # only), so this is where the installable APK comes from. Without the
+      # COACH_URL / COACH_TOKEN secrets the app still works, offline.
+      - run: >-
+          flutter build apk --debug --target-platform android-arm64
+          --dart-define=COACH_URL=${{ secrets.COACH_URL }}
+          --dart-define=COACH_TOKEN=${{ secrets.COACH_TOKEN }}
 
       - uses: actions/upload-artifact@v4
         with:
           name: SreyhanDiary-debug-${{ github.sha }}
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 14
+
+      # Every build on main replaces the "latest" release, so this link always
+      # gets the newest APK:
+      # https://github.com/<owner>/SreyhanTravelDiary/releases/latest/download/SreyhanDiary.apk
+      - name: Publish to Releases
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-debug.apk SreyhanDiary.apk
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest SreyhanDiary.apk \
+            --target "$GITHUB_SHA" \
+            --title "Sreyhan's Diary (newest build)" \
+            --notes "Built from ${GITHUB_SHA::7}: $(git log -1 --format=%s)"

@@ -206,47 +206,53 @@ class _BlobButtonState extends State<BlobButton> {
   Widget build(BuildContext context) {
     final enabled = widget.onTap != null;
     final c = enabled ? widget.color : const Color(0xFFC9C3DA);
-    final button = GestureDetector(
-      onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-      onTapCancel: () => setState(() => _down = false),
-      onTapUp: enabled
-          ? (_) {
-              setState(() => _down = false);
-              HapticFeedback.selectionClick();
-              App.of(context).sounds.play(widget.sound);
-              widget.onTap!();
-            }
-          : null,
-      child: AnimatedScale(
-        scale: _down ? 0.88 : 1,
-        duration: const Duration(milliseconds: 90),
-        child: Container(
-          width: widget.size,
-          height: widget.size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              center: const Alignment(-0.3, -0.4),
-              colors: [Color.lerp(c, Colors.white, 0.3)!, c],
-            ),
-            border: Border.all(color: Colors.white, width: 4),
-            boxShadow: [BoxShadow(color: Gj.edge(c), offset: const Offset(0, 5))],
+    final circle = AnimatedScale(
+      scale: _down ? 0.88 : 1,
+      duration: const Duration(milliseconds: 90),
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            center: const Alignment(-0.3, -0.4),
+            colors: [Color.lerp(c, Colors.white, 0.3)!, c],
           ),
-          child: Icon(widget.icon, color: Colors.white, size: widget.size * 0.5),
+          border: Border.all(color: Colors.white, width: 4),
+          boxShadow: [BoxShadow(color: Gj.edge(c), offset: const Offset(0, 5))],
         ),
+        child: Icon(widget.icon, color: Colors.white, size: widget.size * 0.5),
       ),
     );
-    if (widget.label == null) return Semantics(button: true, child: button);
+    // The label is part of the button: children tap the word as often as the circle.
     return Semantics(
       button: true,
       label: widget.label,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          button,
-          const SizedBox(height: 4),
-          Text(widget.label!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Gj.ink)),
-        ],
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+        onTapCancel: () => setState(() => _down = false),
+        onTapUp: enabled
+            ? (_) {
+                setState(() => _down = false);
+                HapticFeedback.selectionClick();
+                App.of(context).sounds.play(widget.sound);
+                widget.onTap!();
+              }
+            : null,
+        child: widget.label == null
+            ? circle
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  circle,
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.label!,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: enabled ? Gj.ink : Gj.inkSoft),
+                  ),
+                ],
+              ),
       ),
     );
   }

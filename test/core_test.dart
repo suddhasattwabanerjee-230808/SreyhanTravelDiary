@@ -1,8 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:sreyhan_diary/coach.dart';
 import 'package:sreyhan_diary/diary_store.dart';
 import 'package:sreyhan_diary/models.dart';
+import 'package:sreyhan_diary/screens/word_jar_screen.dart';
 import 'package:sreyhan_diary/words.dart';
 
 void main() {
@@ -35,6 +40,102 @@ void main() {
     });
   });
 
+  group('reading back', () {
+    const target = 'I rode a tall, brown camel.';
+
+    test('reading it all earns three stars and lights every word', () {
+      final r = scoreReading(target, 'i rode a tall brown camel');
+      expect(r.stars, 3);
+      expect(r.all, isTrue);
+    });
+
+    test('a skipped or misheard word costs only itself', () {
+      final r = scoreReading(target, 'I rode a tall brown camera');
+      expect(r.matched, [true, true, true, true, true, false]);
+      expect(r.stars, 2);
+    });
+
+    test('each heard word counts once', () {
+      final r = scoreReading('the cat and the dog', 'the cat');
+      expect(r.matched, [true, true, false, false, false]);
+      expect(r.stars, 1);
+    });
+
+    test('nothing read, no stars', () {
+      expect(scoreReading(target, 'hello').stars, 0);
+    });
+
+    test('word spans line up with split words', () {
+      final spans = wordSpans('We  saw a\ncamel!');
+      expect(spans.map((s) => s.text), splitWords('We  saw a\ncamel!'));
+      expect(spans.last.start, 10);
+    });
+  });
+
+  group('coach client', () {
+    late List<Map<String, dynamic>> sent;
+    HttpCoach coachReplying(int status, Object body) {
+      sent = [];
+      final client = MockClient((req) async {
+        expect(req.headers['Authorization'], 'Bearer tok');
+        sent.add(jsonDecode(req.body) as Map<String, dynamic>);
+        return http.Response(jsonEncode(body), status);
+      });
+      return HttpCoach('https://coach.test', 'tok', client: client, photoBytes: (_) async => [1, 2, 3]);
+    }
+
+    test('asks with the photo and returns the questions', () async {
+      final coach = coachReplying(200, {'praise': 'Wow!', 'questions': ['What colour?', ' ', 'Was it big?']});
+      final q = await coach.ask('p.jpg', 'a camel');
+      expect(q!.praise, 'Wow!');
+      expect(q.questions, ['What colour?', 'Was it big?']);
+      expect(sent.single, {'action': 'ask', 'said': 'a camel', 'image': base64Encode([1, 2, 3])});
+    });
+
+    test('keeps only new words that are really in the sentence', () async {
+      final coach = coachReplying(200, {
+        'praise': 'Great!',
+        'sentences': ['I rode a tall camel.', 'It was fun.'],
+        'newWords': [
+          {'word': 'tall', 'meaning': 'very high'},
+          {'word': 'enormous', 'meaning': 'very big'},
+        ],
+      });
+      final s = await coach.polish('p.jpg', 'camel ride');
+      expect(s!.text, 'I rode a tall camel. It was fun.');
+      expect(s.newWords.map((w) => w.word), ['tall']);
+    });
+
+    test('any failure means null, so the screens go offline', () async {
+      expect(await coachReplying(503, {'error': 'busy'}).ask('p.jpg', 'hi'), isNull);
+      expect(await coachReplying(200, {'questions': []}).ask('p.jpg', 'hi'), isNull);
+      expect(await coachReplying(200, {'english': ''}).bridge('oont'), isNull);
+      expect(HttpCoach('', '').online, isFalse);
+      expect(await HttpCoach('', '').bridge('oont'), isNull);
+    });
+
+    test('offline polish just tidies the words', () {
+      expect(offlinePolish('we saw a camel').text, 'We saw a camel.');
+      expect(offlinePolish('we saw a camel').newWords, isEmpty);
+    });
+  });
+
+  test('the word jar holds each word once, newest first', () {
+    Moment m(String id, List<String> words) => Moment(
+      id: id,
+      createdAt: DateTime(2026, 10, 22),
+      photo: 'media/$id.jpg',
+      text: '',
+      newWords: [for (final w in words) NewWord(w, '')],
+    );
+    final jar = collectWords([
+      DiaryDay(date: '2026-10-22', moments: [m('a', ['tall']), m('b', ['shiny', 'Tall'])]),
+      DiaryDay(date: '2026-10-21', moments: [m('c', ['huge'])]),
+    ]);
+    expect(jar.map((j) => j.word.word), ['shiny', 'Tall', 'huge']);
+    expect(jar.first.photo, 'media/b.jpg');
+  });
+
   group('models', () {
     test('day round-trips through JSON', () {
       final day = DiaryDay(
@@ -45,6 +146,9 @@ void main() {
             createdAt: DateTime(2026, 10, 22, 9, 30),
             photo: 'media/a1.jpg',
             text: 'We saw a camel.',
+            superSentence: 'We saw a tall camel.',
+            newWords: const [NewWord('tall', 'very high')],
+            stars: 2,
             source: 'gallery',
           ),
         ],
@@ -53,6 +157,9 @@ void main() {
       expect(back.date, day.date);
       expect(back.moments.single.text, 'We saw a camel.');
       expect(back.moments.single.source, 'gallery');
+      expect(back.moments.single.pageText, 'We saw a tall camel.');
+      expect(back.moments.single.newWords.single.meaning, 'very high');
+      expect(back.moments.single.stars, 2);
       expect(back.moments.single.createdAt, DateTime(2026, 10, 22, 9, 30));
     });
 

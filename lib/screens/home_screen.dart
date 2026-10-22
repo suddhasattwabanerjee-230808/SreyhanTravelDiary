@@ -10,6 +10,7 @@ import '../widgets/sheru.dart';
 import '../widgets/sky.dart';
 import 'day_screen.dart';
 import 'moment_screen.dart';
+import 'word_jar_screen.dart';
 
 const childName = 'Sreyhan';
 
@@ -73,6 +74,11 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.of(context).push(MaterialPageRoute<bool>(builder: (_) => const MomentScreen()));
   }
 
+  void _openJar() {
+    _app.sounds.play(Sfx.whoosh);
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WordJarScreen()));
+  }
+
   void _openDay(String date) {
     _app.sounds.play(Sfx.whoosh);
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DayScreen(date: date)));
@@ -103,7 +109,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-                    _MusicToggle(sounds: _app.sounds),
+                    Column(
+                      children: [
+                        _MusicToggle(sounds: _app.sounds),
+                        const SizedBox(height: 10),
+                        _JarButton(count: collectWords(_days).length, onTap: _openJar),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -203,6 +215,37 @@ class _MusicToggle extends StatelessWidget {
         size: 54,
         onTap: () => sounds.setMusicOn(!sounds.musicOn),
       ),
+    );
+  }
+}
+
+/// Opens the Word Jar; the badge counts the words in it.
+class _JarButton extends StatelessWidget {
+  const _JarButton({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        BlobButton(icon: Icons.abc_rounded, color: Gj.teal, size: 54, label: 'Words', onTap: onTap),
+        if (count > 0)
+          Positioned(
+            right: -6,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+              decoration: BoxDecoration(
+                color: Gj.kumkum,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: Text('$count', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white)),
+            ),
+          ),
+      ],
     );
   }
 }

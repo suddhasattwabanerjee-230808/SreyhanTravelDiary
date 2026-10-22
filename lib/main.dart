@@ -3,9 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'app_scope.dart';
+import 'coach.dart';
 import 'diary_store.dart';
+import 'env.dart';
 import 'screens/home_screen.dart';
 import 'sound_board.dart';
+import 'speaker.dart';
 import 'theme.dart';
 import 'voice.dart';
 
@@ -14,7 +17,16 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final store = await DiaryStore.open();
   final sounds = await SoundBoard.load();
-  runApp(DiaryApp(store: store, sounds: sounds, voice: DeviceVoiceInput(), pickPhoto: pickPhotoFromDevice));
+  runApp(
+    DiaryApp(
+      store: store,
+      sounds: sounds,
+      voice: DeviceVoiceInput(),
+      pickPhoto: pickPhotoFromDevice,
+      coach: HttpCoach(coachUrl, coachToken),
+      speaker: DeviceSpeaker(),
+    ),
+  );
 }
 
 /// Photos are scaled down on the way in: plenty for a page, light on storage.
@@ -35,6 +47,8 @@ class DiaryApp extends StatefulWidget {
     required this.sounds,
     required this.voice,
     required this.pickPhoto,
+    required this.coach,
+    required this.speaker,
     this.now = DateTime.now,
   });
 
@@ -42,6 +56,8 @@ class DiaryApp extends StatefulWidget {
   final SoundBoard sounds;
   final VoiceInput voice;
   final PhotoPicker pickPhoto;
+  final Coach coach;
+  final Speaker speaker;
   final DateTime Function() now;
 
   @override
@@ -79,6 +95,8 @@ class _DiaryAppState extends State<DiaryApp> with WidgetsBindingObserver {
       sounds: widget.sounds,
       voice: widget.voice,
       pickPhoto: widget.pickPhoto,
+      coach: widget.coach,
+      speaker: widget.speaker,
       now: widget.now,
       child: MaterialApp(
         title: "Sreyhan's Travel Diary",

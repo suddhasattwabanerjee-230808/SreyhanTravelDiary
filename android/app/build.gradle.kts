@@ -30,10 +30,22 @@ android {
         versionName = flutter.versionName
     }
 
+    // One fixed key for every build, committed here (debug-grade, password
+    // "android"). Android only installs an update over the app when the key
+    // matches; with CI's throwaway keys each update would need an uninstall,
+    // and uninstalling deletes the diary.
+    // SHA-256 A6:12:28:86:A4:ED:FB:B6:E7:41:DD:33:BE:81:D1:19:7F:49:13:64:64:22:18:B3:39:0D:9F:7F:65:E3:B2:F4
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("sreyhan-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

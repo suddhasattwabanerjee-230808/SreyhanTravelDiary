@@ -20,11 +20,14 @@ abstract class VoiceInput {
   /// [onLevel] gets loudness from 0 to 1. With [oneShot] listening ends by
   /// itself after the first thing said (for fixing one word). [onEnded] is
   /// called when listening ends by itself, so the screen can wrap up.
+  /// [languages] picks the first of these the phone can hear (e.g. `gu_IN`,
+  /// `hi_IN`) instead of English; start returns false if it has none.
   Future<bool> start({
     required void Function(String text) onText,
     void Function(double level)? onLevel,
     bool oneShot = false,
     VoidCallback? onEnded,
+    List<String>? languages,
   });
 
   /// Stops and returns everything that was said.
@@ -39,7 +42,9 @@ class DeviceVoiceInput implements VoiceInput {
   static const maxListen = Duration(seconds: 60);
 
   final _stt = SpeechToText();
+  String? _english;
   String? _localeId;
+  List<String> _locales = const [];
   VoiceReady? _ready;
 
   bool _active = false;
@@ -66,7 +71,8 @@ class DeviceVoiceInput implements VoiceInput {
         final perm = await _stt.hasPermission;
         return _ready = perm ? VoiceReady.unavailable : VoiceReady.noPermission;
       }
-      _localeId = await _pickLocale();
+      _locales = (await _stt.locales()).map((l) => l.localeId).toList();
+      _english = _pickLocale(const ['en_in', 'en_gb', 'en_us']) ?? _pickLocale(const [], anyEnglish: true);
       return _ready = VoiceReady.ready;
     } catch (e) {
       debugPrint('speech init failed: $e');
@@ -74,17 +80,18 @@ class DeviceVoiceInput implements VoiceInput {
     }
   }
 
-  /// Indian English first, then any English the phone has.
-  Future<String?> _pickLocale() async {
-    final ids = (await _stt.locales()).map((l) => l.localeId).toList();
+  /// The first of [wanted] the phone has (Indian English first for English).
+  String? _pickLocale(List<String> wanted, {bool anyEnglish = false}) {
     String norm(String s) => s.replaceAll('-', '_').toLowerCase();
-    for (final want in ['en_in', 'en_gb', 'en_us']) {
-      for (final id in ids) {
-        if (norm(id) == want) return id;
+    for (final want in wanted) {
+      for (final id in _locales) {
+        if (norm(id) == norm(want)) return id;
       }
     }
-    for (final id in ids) {
-      if (norm(id).startsWith('en')) return id;
+    if (anyEnglish) {
+      for (final id in _locales) {
+        if (norm(id).startsWith('en')) return id;
+      }
     }
     return null;
   }
@@ -97,9 +104,16 @@ class DeviceVoiceInput implements VoiceInput {
     void Function(double level)? onLevel,
     bool oneShot = false,
     VoidCallback? onEnded,
+    List<String>? languages,
   }) async {
     if (_active) return true;
     if (await init() != VoiceReady.ready) return false;
+    if (languages != null) {
+      _localeId = _pickLocale(languages);
+      if (_localeId == null) return false;
+    } else {
+      _localeId = _english;
+    }
     _segments.clear();
     _current = '';
     _onText = onText;
