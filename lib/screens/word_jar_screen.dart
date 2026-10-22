@@ -4,6 +4,7 @@ import '../app_scope.dart';
 import '../models.dart';
 import '../sound_board.dart';
 import '../theme.dart';
+import '../widgets/photo.dart';
 import '../widgets/playful.dart';
 import '../widgets/sheru.dart';
 import '../words.dart';
@@ -172,7 +173,7 @@ class _WordCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image(image: FileImage(store.file(word.photo)), fit: BoxFit.cover, gaplessPlayback: true),
+                    SizedPhoto(FileImage(store.file(word.photo))),
                     Positioned(
                       right: 6,
                       top: 6,

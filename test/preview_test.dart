@@ -83,6 +83,8 @@ class FakeTranslator implements WordTranslator {
 
 class SilentSpeaker implements Speaker {
   @override
+  Future<void> warmUp() async {}
+  @override
   Future<void> say(String text, {void Function(int start, int end)? onWord}) async {}
   @override
   Future<void> stop() async {}

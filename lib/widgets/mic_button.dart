@@ -65,41 +65,62 @@ class _MicButtonState extends State<MicButton> with SingleTickerProviderStateMix
                     widget.onTap();
                   }
                 : null,
-            child: SizedBox.square(
-              dimension: s * 1.45,
-              child: AnimatedBuilder(
-                animation: _ripple,
-                builder: (context, child) => CustomPaint(
-                  painter: _RingsPainter(t: _ripple.value, listening: widget.listening, level: widget.level, radius: s / 2),
-                  child: child,
-                ),
-                child: Center(
-                  child: AnimatedScale(
-                    scale: _pressed ? 0.9 : (widget.listening ? 1.06 : 1),
-                    duration: const Duration(milliseconds: 160),
-                    curve: Curves.easeOutBack,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      width: s,
-                      height: s,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          center: const Alignment(-0.3, -0.4),
-                          colors: [Color.lerp(color, Colors.white, 0.35)!, color],
+            child: RepaintBoundary(
+              child: SizedBox.square(
+                dimension: s * 1.45,
+                child: AnimatedBuilder(
+                  animation: _ripple,
+                  builder: (context, child) => CustomPaint(
+                    painter: _RingsPainter(
+                      t: _ripple.value,
+                      listening: widget.listening,
+                      level: widget.level,
+                      radius: s / 2,
+                    ),
+                    child: child,
+                  ),
+                  child: Center(
+                    child: AnimatedScale(
+                      scale: _pressed ? 0.9 : (widget.listening ? 1.06 : 1),
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOutBack,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        width: s,
+                        height: s,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            center: const Alignment(-0.3, -0.4),
+                            colors: [Color.lerp(color, Colors.white, 0.35)!, color],
+                          ),
+                          border: Border.all(color: Colors.white, width: 6),
+                          boxShadow: [
+                            BoxShadow(color: Gj.edge(color), offset: const Offset(0, 7)),
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.45),
+                              blurRadius: 24,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
                         ),
-                        border: Border.all(color: Colors.white, width: 6),
-                        boxShadow: [
-                          BoxShadow(color: Gj.edge(color), offset: const Offset(0, 7)),
-                          BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 24, offset: const Offset(0, 10)),
-                        ],
-                      ),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
-                        child: widget.listening
-                            ? Icon(Icons.stop_rounded, key: const ValueKey('stop'), color: Colors.white, size: s * 0.52)
-                            : Icon(Icons.mic_rounded, key: const ValueKey('mic'), color: Colors.white, size: s * 0.56),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                          child: widget.listening
+                              ? Icon(
+                                  Icons.stop_rounded,
+                                  key: const ValueKey('stop'),
+                                  color: Colors.white,
+                                  size: s * 0.52,
+                                )
+                              : Icon(
+                                  Icons.mic_rounded,
+                                  key: const ValueKey('mic'),
+                                  color: Colors.white,
+                                  size: s * 0.56,
+                                ),
+                        ),
                       ),
                     ),
                   ),

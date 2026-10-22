@@ -36,14 +36,22 @@ Future<void> main() async {
       }
     }
 
-    await step('orientation', () => SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]), () {});
-    final store = await step(
+    // All at once rather than one after another: a quicker start.
+    final orientation = step(
+      'orientation',
+      () => SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
+      () {},
+    );
+    final opening = step(
       'diary folder',
       DiaryStore.open,
       // Where path_provider puts app documents on Android anyway.
       () => DiaryStore(Directory('/data/user/0/com.bittu.sreyhan_diary/app_flutter/diary')),
     );
-    final prefs = await Prefs.load();
+    final loading = Prefs.load();
+    await orientation;
+    final store = await opening;
+    final prefs = await loading;
     runApp(
       DiaryApp(
         store: store,
@@ -61,13 +69,14 @@ Future<void> main() async {
   }, reportError);
 }
 
-/// Photos are scaled down on the way in: plenty for a page, light on storage.
+/// Photos are scaled down on the way in: plenty for a page or a print, light
+/// on storage, and quick to save and show.
 Future<String?> pickPhotoFromDevice({required bool camera}) async {
   final x = await ImagePicker().pickImage(
     source: camera ? ImageSource.camera : ImageSource.gallery,
-    maxWidth: 2048,
-    maxHeight: 2048,
-    imageQuality: 85,
+    maxWidth: 1600,
+    maxHeight: 1600,
+    imageQuality: 82,
   );
   return x?.path;
 }
@@ -114,6 +123,8 @@ class _DiaryAppState extends State<DiaryApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.sounds.startMusic();
+    // Once the home screen is up, get Sheru's voice ready in the background.
+    Future.delayed(const Duration(seconds: 2), widget.speaker.warmUp);
   }
 
   @override

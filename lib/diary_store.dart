@@ -31,27 +31,38 @@ class DiaryStore extends ChangeNotifier {
     return '${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${r.nextInt(1 << 20).toRadixString(36)}';
   }
 
+  /// Every day read so far, by date. The files are read once; after that
+  /// the screens get days from memory, and saving keeps both in step.
+  final _cache = <String, DiaryDay>{};
+  Future<void>? _readAll;
+
   /// Every day that has at least one moment, newest first.
   Future<List<DiaryDay>> allDays() async {
-    if (!await _days.exists()) return [];
-    final days = <DiaryDay>[];
-    await for (final f in _days.list()) {
-      if (f is! File || !f.path.endsWith('.json')) continue;
-      try {
-        final d = DiaryDay.fromJson(jsonDecode(await f.readAsString()) as Map<String, dynamic>);
-        if (!d.isEmpty) days.add(d);
-      } catch (e) {
-        debugPrint('Skipping unreadable day ${f.path}: $e');
-      }
-    }
+    await (_readAll ??= _readAllDays());
+    final days = _cache.values.where((d) => !d.isEmpty).toList();
     days.sort((a, b) => b.date.compareTo(a.date));
     return days;
   }
 
+  Future<void> _readAllDays() async {
+    if (!await _days.exists()) return;
+    await for (final f in _days.list()) {
+      if (f is! File || !f.path.endsWith('.json')) continue;
+      try {
+        final d = DiaryDay.fromJson(jsonDecode(await f.readAsString()) as Map<String, dynamic>);
+        _cache.putIfAbsent(d.date, () => d);
+      } catch (e) {
+        debugPrint('Skipping unreadable day ${f.path}: $e');
+      }
+    }
+  }
+
   Future<DiaryDay> day(String date) async {
+    final cached = _cache[date];
+    if (cached != null) return cached;
     final f = File('${_days.path}/$date.json');
     if (!await f.exists()) return DiaryDay(date: date);
-    return DiaryDay.fromJson(jsonDecode(await f.readAsString()) as Map<String, dynamic>);
+    return _cache[date] = DiaryDay.fromJson(jsonDecode(await f.readAsString()) as Map<String, dynamic>);
   }
 
   Future<void> saveDay(DiaryDay day) async {
@@ -61,6 +72,7 @@ class DiaryStore extends ChangeNotifier {
     final tmp = File('${f.path}.tmp');
     await tmp.writeAsString(const JsonEncoder.withIndent(' ').convert(day.toJson()), flush: true);
     await tmp.rename(f.path);
+    _cache[day.date] = day;
     notifyListeners();
   }
 

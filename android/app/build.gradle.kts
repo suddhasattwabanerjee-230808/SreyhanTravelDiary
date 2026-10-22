@@ -67,6 +67,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     // Photo labels from Google Play services' model, not a bundled one.
     implementation("com.google.android.gms:play-services-mlkit-image-labeling:16.0.8")
+    // Bengali/Hindi to English on the phone (WordTranslation.kt).
+    implementation("com.google.mlkit:translate:17.0.3")
 }
 
 kotlin {

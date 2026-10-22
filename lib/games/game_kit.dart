@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app_scope.dart';
 import '../sound_board.dart';
 import '../theme.dart';
+import '../widgets/photo.dart';
 import '../widgets/playful.dart';
 import '../widgets/sentence_view.dart';
 import '../widgets/sheru.dart';
@@ -177,11 +178,7 @@ class DiaryPhoto extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: Image(
-        image: FileImage(App.of(context).store.file(relativePath)),
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-      ),
+      child: SizedPhoto(FileImage(App.of(context).store.file(relativePath))),
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../app_scope.dart';
 import '../sound_board.dart';
 import '../theme.dart';
+import 'photo.dart';
 
 /// A chunky 3D button trimmed with Kutch mirror-work: little round mirrors
 /// around the edge that glint. It sinks when pressed and goes "pop".
@@ -70,7 +71,10 @@ class _KutchButtonState extends State<KutchButton> with SingleTickerProviderStat
               Positioned.fill(
                 top: depth,
                 child: DecoratedBox(
-                  decoration: BoxDecoration(color: Gj.edge(color), borderRadius: BorderRadius.circular(widget.height / 2)),
+                  decoration: BoxDecoration(
+                    color: Gj.edge(color),
+                    borderRadius: BorderRadius.circular(widget.height / 2),
+                  ),
                 ),
               ),
               AnimatedPositioned(
@@ -79,35 +83,37 @@ class _KutchButtonState extends State<KutchButton> with SingleTickerProviderStat
                 right: 0,
                 top: _down ? depth - 1 : 0,
                 height: widget.height,
-                child: AnimatedBuilder(
-                  animation: _glint,
-                  builder: (context, child) => CustomPaint(
-                    painter: _MirrorWorkPainter(color: color, glint: _glint.value),
-                    child: child,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 26),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (widget.icon != null) ...[
-                          Icon(widget.icon, color: Colors.white, size: widget.fontSize * 1.3),
-                          const SizedBox(width: 10),
-                        ],
-                        Flexible(
-                          child: Text(
-                            widget.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: widget.fontSize,
-                              fontWeight: FontWeight.w800,
-                              shadows: const [Shadow(color: Color(0x55000000), offset: Offset(0, 2), blurRadius: 2)],
+                child: RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: _glint,
+                    builder: (context, child) => CustomPaint(
+                      painter: _MirrorWorkPainter(color: color, glint: _glint.value),
+                      child: child,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 26),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (widget.icon != null) ...[
+                            Icon(widget.icon, color: Colors.white, size: widget.fontSize * 1.3),
+                            const SizedBox(width: 10),
+                          ],
+                          Flexible(
+                            child: Text(
+                              widget.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: widget.fontSize,
+                                fontWeight: FontWeight.w800,
+                                shadows: const [Shadow(color: Color(0x55000000), offset: Offset(0, 2), blurRadius: 2)],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -118,6 +124,22 @@ class _KutchButtonState extends State<KutchButton> with SingleTickerProviderStat
       ),
     );
   }
+}
+
+/// Where the mirrors sit along a button's stitched edge. Worked out once per
+/// button size, not on every frame of the glint.
+final _mirrorCache = <RRect, List<Offset>>{};
+
+List<Offset> _mirrorsFor(RRect edge) {
+  if (_mirrorCache.length > 32) _mirrorCache.clear();
+  return _mirrorCache.putIfAbsent(edge, () {
+    // Path metrics can be walked only once.
+    final it = (Path()..addRRect(edge)).computeMetrics().iterator;
+    if (!it.moveNext()) return const [];
+    final metric = it.current;
+    final count = max(8, (metric.length / 34).floor());
+    return [for (var i = 0; i < count; i++) ?metric.getTangentForOffset(metric.length * i / count)?.position];
+  });
 }
 
 class _MirrorWorkPainter extends CustomPainter {
@@ -153,10 +175,10 @@ class _MirrorWorkPainter extends CustomPainter {
         ..color = Colors.white.withValues(alpha: 0.5),
     );
     // Mirrors along the stitched line; one glint travels round.
-    final metric = (Path()..addRRect(inset)).computeMetrics().first;
-    final count = max(8, (metric.length / 34).floor());
+    final mirrors = _mirrorsFor(inset);
+    final count = mirrors.length;
     for (var i = 0; i < count; i++) {
-      final pos = metric.getTangentForOffset(metric.length * i / count)!.position;
+      final pos = mirrors[i];
       final shine = (1 - ((i / count - glint).abs() * 6)).clamp(0.0, 1.0);
       canvas.drawCircle(pos, 4.2, Paint()..color = Color.lerp(const Color(0xFFDDE6F0), Colors.white, shine)!);
       canvas.drawCircle(
@@ -214,10 +236,7 @@ class _BlobButtonState extends State<BlobButton> {
         height: widget.size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: RadialGradient(
-            center: const Alignment(-0.3, -0.4),
-            colors: [Color.lerp(c, Colors.white, 0.3)!, c],
-          ),
+          gradient: RadialGradient(center: const Alignment(-0.3, -0.4), colors: [Color.lerp(c, Colors.white, 0.3)!, c]),
           border: Border.all(color: Colors.white, width: 4),
           boxShadow: [BoxShadow(color: Gj.edge(c), offset: const Offset(0, 5))],
         ),
@@ -288,10 +307,7 @@ class Polaroid extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(3),
-                  child: AspectRatio(
-                    aspectRatio: 4 / 3,
-                    child: Image(image: image, fit: BoxFit.cover, gaplessPlayback: true),
-                  ),
+                  child: AspectRatio(aspectRatio: 4 / 3, child: SizedPhoto(image)),
                 ),
                 if (caption != null) ...[const SizedBox(height: 10), caption!],
               ],
@@ -323,7 +339,14 @@ class Polaroid extends StatelessWidget {
 
 /// One spoken word as a bubble the child can tap to fix.
 class WordBubble extends StatelessWidget {
-  const WordBubble({super.key, required this.word, required this.color, this.live = false, this.selected = false, this.onTap});
+  const WordBubble({
+    super.key,
+    required this.word,
+    required this.color,
+    this.live = false,
+    this.selected = false,
+    this.onTap,
+  });
   final String word;
   final Color color;
 
@@ -343,16 +366,13 @@ class WordBubble extends StatelessWidget {
           color: live ? Colors.white : (selected ? Gj.edge(color) : color),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: live ? color.withValues(alpha: 0.6) : Colors.white, width: 3),
-          boxShadow: live ? null : [BoxShadow(color: Gj.edge(color).withValues(alpha: 0.6), offset: const Offset(0, 3))],
+          boxShadow: live
+              ? null
+              : [BoxShadow(color: Gj.edge(color).withValues(alpha: 0.6), offset: const Offset(0, 3))],
         ),
         child: Text(
           word,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            height: 1.15,
-            color: live ? color : Colors.white,
-          ),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, height: 1.15, color: live ? color : Colors.white),
         ),
       ),
     );
@@ -368,7 +388,16 @@ class BandhaniBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(painter: _BandhaniPainter(color, dot), child: child);
+    // Thousands of dots: drawn once into their own layer and reused, instead
+    // of again every time something on the page animates.
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: RepaintBoundary(child: CustomPaint(isComplex: true, painter: _BandhaniPainter(color, dot))),
+        ),
+        child,
+      ],
+    );
   }
 }
 
@@ -406,7 +435,9 @@ class ConfettiBurst extends StatefulWidget {
   static void show(BuildContext context) {
     final overlay = Overlay.of(context);
     late OverlayEntry entry;
-    entry = OverlayEntry(builder: (_) => IgnorePointer(child: ConfettiBurst(onDone: () => entry.remove())));
+    entry = OverlayEntry(
+      builder: (_) => IgnorePointer(child: ConfettiBurst(onDone: () => entry.remove())),
+    );
     overlay.insert(entry);
   }
 
@@ -477,7 +508,10 @@ class _ConfettiPainter extends CustomPainter {
         );
       } else {
         canvas.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: b.size, height: b.size * 0.55), const Radius.circular(2)),
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(center: Offset.zero, width: b.size, height: b.size * 0.55),
+            const Radius.circular(2),
+          ),
           paint,
         );
       }

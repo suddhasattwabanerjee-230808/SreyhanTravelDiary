@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.3] - 2026-10-22
+
+### Fixed
+- Bengali and Hindi to English works: the translation add-on never
+  connected on the phone (every try failed). It's replaced by the app's own
+  bridge to Google's on-phone translator, which also reports exactly what
+  went wrong if it ever fails.
+- A few taps that could land just as a word bubble closed no longer cause
+  an error.
+
+### Changed
+- Faster everywhere:
+  - Photos are decoded at the size they're shown, not their full size.
+  - The patterned backgrounds and the sky are drawn once and reused, not
+    redrawn on every animation frame.
+  - The button sparkles, kites and mic animate in their own layers.
+  - Diary days are kept in memory after the first read.
+  - Sheru's voice gets ready in the background, so he speaks straight away.
+  - Startup does its steps together.
+- New photos are saved at up to 1600 px (was 2048): quicker to save and show.
+- Crash notes name the functions involved.
+
 ## [0.4.2] - 2026-10-22
 
 ### Fixed

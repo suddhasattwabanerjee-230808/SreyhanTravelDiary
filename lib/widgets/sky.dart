@@ -28,13 +28,21 @@ class _SkySceneState extends State<SkyScene> with SingleTickerProviderStateMixin
   Widget build(BuildContext context) {
     return Stack(
       children: [
+        // The sky and the Rann never change, so each is drawn once into its own
+        // layer; only the sun and clouds in between repaint as they move.
+        Positioned.fill(
+          child: RepaintBoundary(child: CustomPaint(isComplex: true, painter: _SkyPainter(0, _SkyLayer.back))),
+        ),
         Positioned.fill(
           child: RepaintBoundary(
             child: AnimatedBuilder(
               animation: _clock,
-              builder: (context, _) => CustomPaint(painter: _SkyPainter(_clock.value)),
+              builder: (context, _) => CustomPaint(painter: _SkyPainter(_clock.value, _SkyLayer.moving)),
             ),
           ),
+        ),
+        Positioned.fill(
+          child: RepaintBoundary(child: CustomPaint(isComplex: true, painter: _SkyPainter(0, _SkyLayer.front))),
         ),
         widget.child,
       ],
@@ -42,52 +50,63 @@ class _SkySceneState extends State<SkyScene> with SingleTickerProviderStateMixin
   }
 }
 
+enum _SkyLayer { back, moving, front }
+
 class _SkyPainter extends CustomPainter {
-  _SkyPainter(this.t);
+  _SkyPainter(this.t, this.layer);
   final double t;
+  final _SkyLayer layer;
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
     final horizon = h * 0.8;
 
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Gj.skyTop, Gj.skyMid, Gj.skyLow],
-          stops: [0, 0.55, 0.8],
-        ).createShader(Offset.zero & size),
-    );
-
-    // Sun with slowly turning rays.
-    final sun = Offset(w * 0.84, h * 0.09);
-    canvas.save();
-    canvas.translate(sun.dx, sun.dy);
-    canvas.rotate(t * 2 * pi);
-    final ray = Paint()..color = const Color(0x55FFD54F);
-    for (var i = 0; i < 12; i++) {
-      canvas.rotate(pi / 6);
-      canvas.drawPath(
-        Path()
-          ..moveTo(-9, 40)
-          ..lineTo(0, 74)
-          ..lineTo(9, 40)
-          ..close(),
-        ray,
+    if (layer == _SkyLayer.back) {
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Gj.skyTop, Gj.skyMid, Gj.skyLow],
+            stops: [0, 0.55, 0.8],
+          ).createShader(Offset.zero & size),
       );
-    }
-    canvas.restore();
-    canvas.drawCircle(sun, 38, Paint()..color = const Color(0xFFFFD54F));
-    canvas.drawCircle(sun, 30, Paint()..color = const Color(0xFFFFE57F));
 
-    // Clouds drifting left to right, wrapping round.
-    for (final (i, y, s) in [(0, 0.16, 1.0), (1, 0.34, 0.7), (2, 0.5, 0.85), (3, 0.26, 0.55)]) {
-      final speed = 0.6 + i * 0.25;
-      final x = ((t * speed + i * 0.29) % 1.3 - 0.15) * w;
-      _cloud(canvas, Offset(x, h * y), 60 * s);
+      return;
+    }
+
+    if (layer == _SkyLayer.moving) {
+      // Sun with slowly turning rays.
+      final sun = Offset(w * 0.84, h * 0.09);
+      canvas.save();
+      canvas.translate(sun.dx, sun.dy);
+      canvas.rotate(t * 2 * pi);
+      final ray = Paint()..color = const Color(0x55FFD54F);
+      for (var i = 0; i < 12; i++) {
+        canvas.rotate(pi / 6);
+        canvas.drawPath(
+          Path()
+            ..moveTo(-9, 40)
+            ..lineTo(0, 74)
+            ..lineTo(9, 40)
+            ..close(),
+          ray,
+        );
+      }
+      canvas.restore();
+      canvas.drawCircle(sun, 38, Paint()..color = const Color(0xFFFFD54F));
+      canvas.drawCircle(sun, 30, Paint()..color = const Color(0xFFFFE57F));
+
+      // Clouds drifting left to right, wrapping round.
+      for (final (i, y, s) in [(0, 0.16, 1.0), (1, 0.34, 0.7), (2, 0.5, 0.85), (3, 0.26, 0.55)]) {
+        final speed = 0.6 + i * 0.25;
+        final x = ((t * speed + i * 0.29) % 1.3 - 0.15) * w;
+        _cloud(canvas, Offset(x, h * y), 60 * s);
+      }
+
+      return;
     }
 
     // Distant bhunga huts on the horizon.
@@ -148,7 +167,7 @@ class _SkyPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SkyPainter old) => old.t != t;
+  bool shouldRepaint(_SkyPainter old) => old.t != t || old.layer != layer;
 }
 
 /// An Uttarayan kite with a patola-style split, a bow tail and a string.
@@ -176,7 +195,14 @@ class KitePainter extends CustomPainter {
     canvas.drawPath(
       Path()
         ..moveTo(bottom.dx, bottom.dy)
-        ..cubicTo(bottom.dx + 20 * sway, bottom.dy + 40, bottom.dx - 30, size.height - 40, bottom.dx + 10 * sway, size.height),
+        ..cubicTo(
+          bottom.dx + 20 * sway,
+          bottom.dy + 40,
+          bottom.dx - 30,
+          size.height - 40,
+          bottom.dx + 10 * sway,
+          size.height,
+        ),
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4
@@ -303,53 +329,58 @@ class _FlyingKiteState extends State<FlyingKite> with SingleTickerProviderStateM
     return GestureDetector(
       onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, child) {
-          final a = (_c.value + widget.phase) * 2 * pi;
-          return Transform.translate(
-            offset: Offset(sin(a) * 5, cos(a * 2) * 4),
-            child: Transform.rotate(angle: sin(a) * 0.08, child: child),
-          );
-        },
-        child: SizedBox(
-          width: w,
-          height: w * 1.6,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: AnimatedBuilder(
-                  animation: _c,
-                  builder: (context, _) => CustomPaint(
-                    painter: KitePainter(
-                      color: widget.color,
-                      accent: widget.accent,
-                      sway: sin((_c.value + widget.phase) * 2 * pi),
-                      glow: widget.glow ? 0.6 + 0.4 * sin(_c.value * 4 * pi) : 0,
+      // Bobbing kites repaint every frame; keep that to their own layer.
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (context, child) {
+            final a = (_c.value + widget.phase) * 2 * pi;
+            return Transform.translate(
+              offset: Offset(sin(a) * 5, cos(a * 2) * 4),
+              child: Transform.rotate(angle: sin(a) * 0.08, child: child),
+            );
+          },
+          child: SizedBox(
+            width: w,
+            height: w * 1.6,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: AnimatedBuilder(
+                    animation: _c,
+                    builder: (context, _) => CustomPaint(
+                      painter: KitePainter(
+                        color: widget.color,
+                        accent: widget.accent,
+                        sway: sin((_c.value + widget.phase) * 2 * pi),
+                        glow: widget.glow ? 0.6 + 0.4 * sin(_c.value * 4 * pi) : 0,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                top: w * 1.05 * 0.42 - w * widget.badge / 2,
-                height: w * widget.badge,
-                child: Center(
-                  child: Container(
-                    width: w * widget.badge,
-                    height: w * widget.badge,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: widget.accent, width: max(2, w * 0.025)),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: w * 1.05 * 0.42 - w * widget.badge / 2,
+                  height: w * widget.badge,
+                  child: Center(
+                    child: Container(
+                      width: w * widget.badge,
+                      height: w * widget.badge,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: widget.accent, width: max(2, w * 0.025)),
+                      ),
+                      child: FittedBox(
+                        child: Padding(padding: const EdgeInsets.all(2), child: widget.child),
+                      ),
                     ),
-                    child: FittedBox(child: Padding(padding: const EdgeInsets.all(2), child: widget.child)),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

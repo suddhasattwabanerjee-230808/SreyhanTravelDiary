@@ -220,7 +220,8 @@ class _MomentScreenState extends State<MomentScreen> {
       case _Mode.replace:
         _app.sounds.play(Sfx.sparkle);
         setState(() {
-          _words = replaceWord(_words, _replacing!, said);
+          final r = _replacing;
+          _words = r == null || r >= _words.length ? [..._words, ...splitWords(said)] : replaceWord(_words, r, said);
           _replacing = null;
           _sheruSays = 'Fixed it!';
         });
@@ -264,8 +265,10 @@ class _MomentScreenState extends State<MomentScreen> {
     _editFocus.unfocus();
   }
 
+  // A tap can land just as the bubble closes: check before using it.
   void _popEditing() {
-    final i = _editing!;
+    final i = _editing;
+    if (i == null || i >= _words.length) return;
     _editFocus.unfocus();
     setState(() {
       _words = removeWord(_words, i);
@@ -275,7 +278,8 @@ class _MomentScreenState extends State<MomentScreen> {
   }
 
   void _sayEditing() {
-    final i = _editing!;
+    final i = _editing;
+    if (i == null || i >= _words.length) return;
     _editFocus.unfocus();
     setState(() {
       _editing = null;
@@ -334,7 +338,8 @@ class _MomentScreenState extends State<MomentScreen> {
   }
 
   void _addBridged() {
-    final b = _bridged!;
+    final b = _bridged;
+    if (b == null) return;
     setState(() {
       _words = [..._words, ...splitWords(b.word)];
       if (!_learned.any((w) => bareWord(w.word) == bareWord(b.word))) _learned.add(b);

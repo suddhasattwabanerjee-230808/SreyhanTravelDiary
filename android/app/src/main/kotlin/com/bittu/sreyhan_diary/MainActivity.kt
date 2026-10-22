@@ -50,6 +50,10 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        MethodChannel(messenger, "sreyhan/translate").setMethodCallHandler { call, result ->
+            WordTranslation.handle(this, call, result)
+        }
+
         MethodChannel(messenger, "sreyhan/labels").setMethodCallHandler { call, result ->
             val path = call.argument<String>("path")
             if (call.method != "labels" || path == null) {

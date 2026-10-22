@@ -11,6 +11,10 @@ abstract class Speaker {
   /// character range of the word being spoken.
   Future<void> say(String text, {void Function(int start, int end)? onWord});
   Future<void> stop();
+
+  /// Gets the speech engine ready ahead of time, so Sheru's first words
+  /// come straight away.
+  Future<void> warmUp();
 }
 
 class DeviceSpeaker implements Speaker {
@@ -33,6 +37,15 @@ class DeviceSpeaker implements Speaker {
     _tts.setCompletionHandler(finish);
     _tts.setCancelHandler(finish);
     _tts.setErrorHandler((_) => finish());
+  }
+
+  @override
+  Future<void> warmUp() async {
+    try {
+      await (_setup ??= _init().timeout(const Duration(seconds: 5)));
+    } catch (_) {
+      _setup = null;
+    }
   }
 
   @override

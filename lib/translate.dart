@@ -1,24 +1,26 @@
-import 'package:flutter/foundation.dart';
-import 'package:google_mlkit_translation/google_mlkit_translation.dart';
+import 'package:flutter/services.dart';
 
 import 'app_channel.dart';
 
 /// The languages a child can say a word in, to get it in English.
 enum HomeLanguage {
-  bengali('Bengali', 'বাংলা', ['bn_IN', 'bn_BD'], TranslateLanguage.bengali),
-  hindi('Hindi', 'हिंदी', ['hi_IN'], TranslateLanguage.hindi);
+  bengali('Bengali', 'বাংলা', ['bn_IN', 'bn_BD'], 'bn'),
+  hindi('Hindi', 'हिंदी', ['hi_IN'], 'hi');
 
-  const HomeLanguage(this.name, this.native, this.speechLocales, this.mlkit);
+  const HomeLanguage(this.name, this.native, this.speechLocales, this.code);
   final String name;
 
   /// The language's own name, in its own script.
   final String native;
   final List<String> speechLocales;
-  final TranslateLanguage mlkit;
+
+  /// ML Kit's language code.
+  final String code;
 }
 
-/// Bengali or Hindi to English, on the phone (Google ML Kit). Each language
-/// needs a one-time download of about 30 MB; after that it works offline.
+/// Bengali or Hindi to English, on the phone (Google ML Kit, through
+/// WordTranslation.kt). Each language needs a one-time download of about
+/// 30 MB; after that it works offline.
 abstract class WordTranslator {
   Future<bool> isReady(HomeLanguage lang);
 
@@ -30,17 +32,14 @@ abstract class WordTranslator {
 }
 
 class DeviceTranslator implements WordTranslator {
-  final _models = OnDeviceTranslatorModelManager();
-  final _translators = <HomeLanguage, OnDeviceTranslator>{};
+  static const _channel = MethodChannel('sreyhan/translate');
 
   @override
   Future<bool> isReady(HomeLanguage lang) async {
     try {
-      const wait = Duration(seconds: 5);
-      return await _models.isModelDownloaded(lang.mlkit.bcpCode).timeout(wait) &&
-          await _models.isModelDownloaded(TranslateLanguage.english.bcpCode).timeout(wait);
-    } catch (e) {
-      debugPrint('translation check failed: $e');
+      return await _channel.invokeMethod<bool>('isReady', {'lang': lang.code}).timeout(const Duration(seconds: 8)) ?? false;
+    } catch (e, st) {
+      reportError('Translation check: $e', st);
       return false;
     }
   }
@@ -50,9 +49,8 @@ class DeviceTranslator implements WordTranslator {
     if (await isReady(lang)) return true;
     try {
       // A slow connection can take a while, but not forever.
-      const wait = Duration(minutes: 3);
-      return await _models.downloadModel(lang.mlkit.bcpCode, isWifiRequired: false).timeout(wait) &&
-          await _models.downloadModel(TranslateLanguage.english.bcpCode, isWifiRequired: false).timeout(wait);
+      return await _channel.invokeMethod<bool>('download', {'lang': lang.code}).timeout(const Duration(minutes: 4)) ??
+          false;
     } catch (e, st) {
       reportError('Translation download: $e', st);
       return false;
@@ -62,11 +60,10 @@ class DeviceTranslator implements WordTranslator {
   @override
   Future<String?> toEnglish(String text, HomeLanguage lang) async {
     try {
-      final t = _translators[lang] ??= OnDeviceTranslator(
-        sourceLanguage: lang.mlkit,
-        targetLanguage: TranslateLanguage.english,
-      );
-      final english = cleanTranslation(await t.translateText(text).timeout(const Duration(seconds: 10)));
+      final raw = await _channel
+          .invokeMethod<String>('translate', {'lang': lang.code, 'text': text})
+          .timeout(const Duration(seconds: 10));
+      final english = cleanTranslation(raw ?? '');
       return english.isEmpty ? null : english;
     } catch (e, st) {
       reportError('Translating: $e', st);
@@ -74,7 +71,6 @@ class DeviceTranslator implements WordTranslator {
     }
   }
 }
-
 /// "Camel." → "camel": ready to add mid-sentence as bubbles. Only a leading
 /// capital is dropped, so "TV" stays "TV".
 String cleanTranslation(String s) {

@@ -1,7 +1,7 @@
 name: sreyhan_diary
 description: "A playful travel diary that helps a child talk about their photos in English."
 publish_to: 'none'
-version: 0.4.2+6
+version: 0.4.3+7
 
 environment:
   sdk: ^3.13.5
@@ -11,7 +11,6 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_tts: ^4.2.5
-  google_mlkit_translation: ^0.15.1
   http: ^1.6.0
   image_picker: ^1.2.4
   package_info_plus: ^10.2.2
