@@ -8,6 +8,7 @@ import 'screens/home_screen.dart';
 import 'sound_board.dart';
 import 'speaker.dart';
 import 'translate.dart';
+import 'updates.dart';
 import 'theme.dart';
 import 'vision.dart';
 import 'voice.dart';
@@ -26,8 +27,10 @@ Future<void> main() async {
       labeler: DeviceLabeler(),
       translator: DeviceTranslator(),
       speaker: DeviceSpeaker(),
+      onResumed: Updates.instance.checkIfDue,
     ),
   );
+  Updates.instance.checkIfDue();
 }
 
 /// Photos are scaled down on the way in: plenty for a page, light on storage.
@@ -52,6 +55,7 @@ class DiaryApp extends StatefulWidget {
     required this.translator,
     required this.speaker,
     this.now = DateTime.now,
+    this.onResumed,
   });
 
   final DiaryStore store;
@@ -62,6 +66,9 @@ class DiaryApp extends StatefulWidget {
   final WordTranslator translator;
   final Speaker speaker;
   final DateTime Function() now;
+
+  /// When the app comes back to the front (checks for updates).
+  final VoidCallback? onResumed;
 
   @override
   State<DiaryApp> createState() => _DiaryAppState();
@@ -86,6 +93,7 @@ class _DiaryAppState extends State<DiaryApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       widget.sounds.startMusic();
+      widget.onResumed?.call();
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
       widget.sounds.stopMusic();
     }

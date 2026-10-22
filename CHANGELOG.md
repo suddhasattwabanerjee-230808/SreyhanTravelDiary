@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0] - 2026-10-22
+
+### Added
+- In-app updates: the app checks for a new version at launch, shows a
+  "New diary update!" card on the home screen, and installs it in place.
+
+### Changed
+- Much smaller APK: release build (ahead-of-time compiled, unused code and
+  icons stripped), arm64 libraries only and compressed, sounds as OGG instead
+  of WAV (944 KB to 144 KB), and the photo-labelling model comes from Google
+  Play services instead of being bundled.
+- The big "Today" kite shrinks to fit smaller screens.
+
 ## [0.3.0] - 2026-10-22
 
 ### Added

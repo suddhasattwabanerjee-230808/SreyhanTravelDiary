@@ -1,12 +1,14 @@
 """Synthesises the app's sound effects and the garba music loop into
-assets/sounds/*.wav, so every sound is our own and needs no licence.
+assets/sounds/*.ogg, so every sound is our own and needs no licence.
 
     python3 tool/make_sounds.py
 
-Needs numpy. Mono 16-bit WAV at 22.05 kHz keeps the files small.
+Needs numpy and sox (for the OGG Vorbis encoding, about a tenth of WAV's size).
 """
 
 import os
+import subprocess
+import tempfile
 import wave
 
 import numpy as np
@@ -91,11 +93,14 @@ def save(name, x, peak=0.85):
     x[:fade] *= np.linspace(0, 1, fade)
     x[-fade:] *= np.linspace(1, 0, fade)
     data = (x * 32767).astype("<i2").tobytes()
-    with wave.open(os.path.join(OUT, name + ".wav"), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(RATE)
-        w.writeframes(data)
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = os.path.join(tmp, name + ".wav")
+        with wave.open(wav, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(RATE)
+            w.writeframes(data)
+        subprocess.run(["sox", wav, "-C", "3", os.path.join(OUT, name + ".ogg")], check=True)
 
 
 def silence(seconds):

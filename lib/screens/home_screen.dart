@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
@@ -9,6 +11,7 @@ import '../theme.dart';
 import '../widgets/playful.dart';
 import '../widgets/sheru.dart';
 import '../widgets/sky.dart';
+import '../widgets/update_card.dart';
 import 'day_screen.dart';
 import 'moment_screen.dart';
 import 'word_jar_screen.dart';
@@ -120,27 +123,40 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
+              const UpdateCard(),
               Expanded(
-                child: Column(
-                  children: [
-                    const Spacer(),
-                    FlyingKite(
-                      width: (width * 0.42).clamp(140.0, 210.0),
-                      color: Gj.kumkum,
-                      accent: Gj.marigold,
-                      glow: today.isEmpty,
-                      onTap: today.isEmpty ? _addMoment : () => _openDay(today.date),
-                      child: today.isEmpty
-                          ? const Icon(Icons.add_rounded, size: 52, color: Gj.kumkum)
-                          : Text(
-                              '${today.moments.length}',
-                              style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: Gj.kumkum, height: 1),
-                            ),
-                    ),
-                    const OutlinedTitle('Today', size: 24, color: Gj.kumkum),
-                    const Spacer(),
-                    if (_earlier.isNotEmpty) _earlierKites(),
-                  ],
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    // The big kite takes what's left after the "Today" label
+                    // and the row of earlier kites, so small screens still fit.
+                    final room = box.maxHeight - 40 - (_earlier.isNotEmpty ? 150 : 0);
+                    return Column(
+                      children: [
+                        const Spacer(),
+                        FlyingKite(
+                          width: min((width * 0.42).clamp(140.0, 210.0), room / 1.6).clamp(60.0, 210.0),
+                          color: Gj.kumkum,
+                          accent: Gj.marigold,
+                          glow: today.isEmpty,
+                          onTap: today.isEmpty ? _addMoment : () => _openDay(today.date),
+                          child: today.isEmpty
+                              ? const Icon(Icons.add_rounded, size: 52, color: Gj.kumkum)
+                              : Text(
+                                  '${today.moments.length}',
+                                  style: const TextStyle(
+                                    fontSize: 40,
+                                    fontWeight: FontWeight.w800,
+                                    color: Gj.kumkum,
+                                    height: 1,
+                                  ),
+                                ),
+                        ),
+                        const OutlinedTitle('Today', size: 24, color: Gj.kumkum),
+                        const Spacer(),
+                        if (_earlier.isNotEmpty) _earlierKites(),
+                      ],
+                    );
+                  },
                 ),
               ),
               Padding(
@@ -168,7 +184,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       size: 66,
                       label: 'Games',
                       sound: Sfx.whoosh,
-                      onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const GamesScreen())),
+                      onTap: () =>
+                          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const GamesScreen())),
                     ),
                   ],
                 ),
@@ -259,7 +276,10 @@ class _JarButton extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.white, width: 2),
               ),
-              child: Text('$count', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white)),
+              child: Text(
+                '$count',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white),
+              ),
             ),
           ),
       ],

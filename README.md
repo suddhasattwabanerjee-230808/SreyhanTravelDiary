@@ -22,10 +22,17 @@ works offline.
 - `python3 tool/make_sounds.py` regenerates the sound effects and garba
   music loop in `assets/sounds/` (needs numpy). All sounds are synthesised
   here, so no licences apply.
-- APKs build in CI (`.github/workflows/flutter-ci.yml`). Each build on `main`
-  replaces the `latest` release, so the newest APK is always at
-  `releases/latest/download/SreyhanDiary.apk`. Every build is signed with the
-  same key (`android/app/sreyhan-debug.keystore`), so updates install over the
-  old app and keep the diary.
-
-Font: Baloo 2 (SIL OFL 1.1, `assets/fonts/OFL.txt`), subset to Latin.
+- APKs build in CI (`.github/workflows/flutter-ci.yml`) as release builds
+  for arm64 only, with sounds as OGG and the photo-labelling model left to
+  Google Play services, to keep the download small. Each build on `main` gets
+  build number 100 + the run number and replaces this repo's `latest` release
+  (`releases/latest/download/SreyhanDiary.apk`).
+- **In-app updates:** CI also publishes each build with a `latest.json` to the
+  public `SreyhanTravelDiary-releases` repo (needs the `RELEASES_TOKEN`
+  secret: a fine-grained token with Contents read/write on that repo). The app
+  checks it at launch and when reopened after 6 hours, shows a "New diary
+  update!" card, and installs the new APK in place (`lib/updates.dart`,
+  `AppUpdater.kt`). Android asks to confirm the first update; from then on
+  (Android 12+) it updates without asking.
+- Every build is signed with the same key (`android/app/sreyhan-debug.keystore`),
+  so updates install over the old app and keep the diary.

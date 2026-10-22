@@ -1,25 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
+import 'package:flutter/services.dart';
 
 import 'theme.dart';
 
 /// Names the things in a photo ("Camel", "Sky", "Sand"), on the phone, free
-/// and offline (Google ML Kit's built-in labeller).
+/// and offline (Google ML Kit's labeller, through PhotoLabels.kt).
 abstract class PhotoLabeler {
   /// The most likely labels first; empty if nothing is recognised.
   Future<List<String>> labels(String path);
 }
 
 class DeviceLabeler implements PhotoLabeler {
-  ImageLabeler? _labeler;
+  static const _channel = MethodChannel('sreyhan/labels');
 
   @override
   Future<List<String>> labels(String path) async {
     try {
-      final labeler = _labeler ??= ImageLabeler(options: ImageLabelerOptions(confidenceThreshold: 0.6));
-      final found = await labeler.processImage(InputImage.fromFilePath(path));
-      found.sort((a, b) => b.confidence.compareTo(a.confidence));
-      return [for (final l in found) l.label].take(6).toList();
+      return (await _channel.invokeListMethod<String>('labels', {'path': path})) ?? const [];
     } catch (e) {
       debugPrint('labelling failed: $e');
       return const [];

@@ -47,8 +47,26 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+            // Release builds ship the Flutter engine for arm64 only (see the
+            // CI workflow), so drop the other ABIs' copies of plugin libraries
+            // too: they can never load, and cost megabytes of download.
+            ndk { abiFilters.add("arm64-v8a") }
         }
     }
+
+    packaging {
+        // The APK is downloaded and sideloaded, so download size beats the
+        // small cost of Android extracting compressed libraries at install.
+        jniLibs { useLegacyPackaging = true }
+        // Protobuf source files bundled by Google libraries; never read at runtime.
+        resources { excludes += "google/**/*.proto" }
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    // Photo labels from Google Play services' model, not a bundled one.
+    implementation("com.google.android.gms:play-services-mlkit-image-labeling:16.0.8")
 }
 
 kotlin {

@@ -55,7 +55,7 @@ class SoundBoard extends ChangeNotifier {
     try {
       final p = _sfx[s] ??= AudioPlayer()..setAudioContext(_effectContext);
       await p.stop();
-      await p.play(AssetSource('sounds/${_files[s]}.wav'), mode: PlayerMode.lowLatency);
+      await p.play(AssetSource('sounds/${_files[s]}.ogg'), mode: PlayerMode.lowLatency);
     } catch (e) {
       debugPrint('sfx $s failed: $e');
     }
@@ -92,7 +92,7 @@ class SoundBoard extends ChangeNotifier {
         if (m.state == PlayerState.paused) {
           await m.resume();
         } else if (m.state != PlayerState.playing) {
-          await m.play(AssetSource('sounds/garba_loop.wav'), volume: _musicVolume);
+          await m.play(AssetSource('sounds/garba_loop.ogg'), volume: _musicVolume);
         }
       } else if (_music?.state == PlayerState.playing) {
         await _music!.pause();

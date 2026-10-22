@@ -25,6 +25,7 @@ import 'package:sreyhan_diary/screens/word_jar_screen.dart';
 import 'package:sreyhan_diary/sound_board.dart';
 import 'package:sreyhan_diary/speaker.dart';
 import 'package:sreyhan_diary/translate.dart';
+import 'package:sreyhan_diary/updates.dart';
 import 'package:sreyhan_diary/vision.dart';
 import 'package:sreyhan_diary/voice.dart';
 import 'package:sreyhan_diary/widgets/mic_button.dart';
@@ -238,8 +239,11 @@ void main() {
         }
       }
     });
+    // With a new version waiting.
+    Updates.instance.showForTesting(UpdateInfo(versionCode: 200, versionName: '0.4.0', notes: ''));
     await pumpApp(tester);
     await shot(tester, '2_home_days');
+    Updates.instance.showForTesting(null);
 
     await pumpApp(tester, screen: const MomentScreen());
     await shot(tester, '3_moment_pick');
