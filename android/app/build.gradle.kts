@@ -47,6 +47,8 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+            // Keep rules for ML Kit, which R8 otherwise breaks (see the file).
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Release builds ship the Flutter engine for arm64 only (see the
             // CI workflow), so drop the other ABIs' copies of plugin libraries
             // too: they can never load, and cost megabytes of download.

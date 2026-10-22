@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.1] - 2026-10-22
+
+### Fixed
+- Bengali and Hindi to English work again. In 0.5.0 the release build's
+  code shrinker broke Google's on-phone translator, so every try failed and
+  Sheru wrongly said the internet was needed.
+- If translation ever fails, Sheru no longer blames the internet unless
+  that's likely, and the note in Download now says exactly where it broke.
+
 ## [0.5.0] - 2026-10-22
 
 ### Added

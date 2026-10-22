@@ -64,7 +64,8 @@ object WordTranslation {
                 else -> result.notImplemented()
             }
         } catch (e: Throwable) {
-            result.error("translation", "${e.javaClass.simpleName}: ${e.message}", null)
+            // The stack trace too: it says where it broke, and lands in the crash note.
+            result.error("translation", "${e.javaClass.simpleName}: ${e.message}", e.stackTraceToString().take(4000))
         }
     }
 }

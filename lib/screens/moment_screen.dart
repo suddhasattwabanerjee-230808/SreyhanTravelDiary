@@ -357,7 +357,8 @@ class _MomentScreenState extends State<MomentScreen> {
       setState(() => _preparing = false);
       if (!ok) {
         _app.sounds.play(Sfx.oops);
-        setState(() => _sheruSays = 'I need the internet once to learn ${lang.name}. Ask a grown-up!');
+        // Usually no internet for the one-time download, but not always.
+        setState(() => _sheruSays = "I can't do ${lang.name} right now. Is the internet on? Ask a grown-up!");
         return;
       }
     }
