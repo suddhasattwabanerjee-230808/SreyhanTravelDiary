@@ -1,14 +1,23 @@
-import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
-import 'package:sreyhan_diary/coach.dart';
 import 'package:sreyhan_diary/diary_store.dart';
+import 'package:sreyhan_diary/games/game_logic.dart';
 import 'package:sreyhan_diary/models.dart';
 import 'package:sreyhan_diary/screens/word_jar_screen.dart';
+import 'package:sreyhan_diary/translate.dart';
+import 'package:sreyhan_diary/vision.dart';
 import 'package:sreyhan_diary/words.dart';
+
+Moment moment(String id, String text, {List<String> labels = const [], List<String> learned = const []}) => Moment(
+  id: id,
+  createdAt: DateTime(2026, 10, 22),
+  photo: 'media/$id.jpg',
+  text: text,
+  labels: labels,
+  learned: [for (final w in learned) LearnedWord(w, 'x', 'Hindi')],
+);
 
 void main() {
   group('words', () {
@@ -17,10 +26,10 @@ void main() {
       expect(joinWords(['a', 'big', 'camel']), 'a big camel');
     });
 
-    test('replace one word with what was said again', () {
+    test('replace one word with a fixed one, or several, or none', () {
       expect(replaceWord(['we', 'saw', 'a', 'camera'], 3, 'camel'), ['we', 'saw', 'a', 'camel']);
       expect(replaceWord(['we', 'saw', 'camel'], 2, 'a big camel'), ['we', 'saw', 'a', 'big', 'camel']);
-      expect(replaceWord(['we', 'um', 'saw'], 1, ''), ['we', 'saw']);
+      expect(replaceWord(['we', 'um', 'saw'], 1, '  '), ['we', 'saw']);
     });
 
     test('remove a word', () {
@@ -38,32 +47,6 @@ void main() {
     test('join recogniser segments', () {
       expect(joinSegments(['we saw', '', ' a camel ', '']), 'we saw a camel');
     });
-  });
-
-  group('reading back', () {
-    const target = 'I rode a tall, brown camel.';
-
-    test('reading it all earns three stars and lights every word', () {
-      final r = scoreReading(target, 'i rode a tall brown camel');
-      expect(r.stars, 3);
-      expect(r.all, isTrue);
-    });
-
-    test('a skipped or misheard word costs only itself', () {
-      final r = scoreReading(target, 'I rode a tall brown camera');
-      expect(r.matched, [true, true, true, true, true, false]);
-      expect(r.stars, 2);
-    });
-
-    test('each heard word counts once', () {
-      final r = scoreReading('the cat and the dog', 'the cat');
-      expect(r.matched, [true, true, false, false, false]);
-      expect(r.stars, 1);
-    });
-
-    test('nothing read, no stars', () {
-      expect(scoreReading(target, 'hello').stars, 0);
-    });
 
     test('word spans line up with split words', () {
       final spans = wordSpans('We  saw a\ncamel!');
@@ -72,68 +55,33 @@ void main() {
     });
   });
 
-  group('coach client', () {
-    late List<Map<String, dynamic>> sent;
-    HttpCoach coachReplying(int status, Object body) {
-      sent = [];
-      final client = MockClient((req) async {
-        expect(req.headers['Authorization'], 'Bearer tok');
-        sent.add(jsonDecode(req.body) as Map<String, dynamic>);
-        return http.Response(jsonEncode(body), status);
-      });
-      return HttpCoach('https://coach.test', 'tok', client: client, photoBytes: (_) async => [1, 2, 3]);
-    }
-
-    test('asks with the photo and returns the questions', () async {
-      final coach = coachReplying(200, {'praise': 'Wow!', 'questions': ['What colour?', ' ', 'Was it big?']});
-      final q = await coach.ask('p.jpg', 'a camel');
-      expect(q!.praise, 'Wow!');
-      expect(q.questions, ['What colour?', 'Was it big?']);
-      expect(sent.single, {'action': 'ask', 'said': 'a camel', 'image': base64Encode([1, 2, 3])});
+  group('photo questions', () {
+    test('labels become kinds of things', () {
+      expect(thingOf('Camel'), Thing.animal);
+      expect(thingOf('Sunset'), Thing.sky);
+      expect(thingOf('Hindu temple'), Thing.building);
+      expect(thingOf('Flowers'), Thing.tree);
+      expect(thingOf('Ice cream'), Thing.food);
+      // Whole words only: "car" isn't in "carpet".
+      expect(thingOf('Carpet'), isNull);
+      expect(thingsIn(['Camel', 'Horse', 'Sky', 'Fun']), {Thing.animal, Thing.sky});
     });
 
-    test('keeps only new words that are really in the sentence', () async {
-      final coach = coachReplying(200, {
-        'praise': 'Great!',
-        'sentences': ['I rode a tall camel.', 'It was fun.'],
-        'newWords': [
-          {'word': 'tall', 'meaning': 'very high'},
-          {'word': 'enormous', 'meaning': 'very big'},
-        ],
-      });
-      final s = await coach.polish('p.jpg', 'camel ride');
-      expect(s!.text, 'I rode a tall camel. It was fun.');
-      expect(s.newWords.map((w) => w.word), ['tall']);
-    });
-
-    test('any failure means null, so the screens go offline', () async {
-      expect(await coachReplying(503, {'error': 'busy'}).ask('p.jpg', 'hi'), isNull);
-      expect(await coachReplying(200, {'questions': []}).ask('p.jpg', 'hi'), isNull);
-      expect(await coachReplying(200, {'english': ''}).bridge('oont'), isNull);
-      expect(HttpCoach('', '').online, isFalse);
-      expect(await HttpCoach('', '').bridge('oont'), isNull);
-    });
-
-    test('offline polish just tidies the words', () {
-      expect(offlinePolish('we saw a camel').text, 'We saw a camel.');
-      expect(offlinePolish('we saw a camel').newWords, isEmpty);
+    test('questions come from the first two things recognised', () {
+      expect(photoQuestions(['Fun', 'Elephant', 'Horse', 'Sky', 'Boat']), [
+        'I see an elephant! What colour was it?',
+        'Was the elephant big or small?',
+        'Look at the sky! What colours can you see?',
+      ]);
+      expect(photoQuestions(['Fun', 'Event']), isEmpty);
     });
   });
 
-  test('the word jar holds each word once, newest first', () {
-    Moment m(String id, List<String> words) => Moment(
-      id: id,
-      createdAt: DateTime(2026, 10, 22),
-      photo: 'media/$id.jpg',
-      text: '',
-      newWords: [for (final w in words) NewWord(w, '')],
-    );
-    final jar = collectWords([
-      DiaryDay(date: '2026-10-22', moments: [m('a', ['tall']), m('b', ['shiny', 'Tall'])]),
-      DiaryDay(date: '2026-10-21', moments: [m('c', ['huge'])]),
-    ]);
-    expect(jar.map((j) => j.word.word), ['shiny', 'Tall', 'huge']);
-    expect(jar.first.photo, 'media/b.jpg');
+  test('translations are ready to drop into a sentence', () {
+    expect(cleanTranslation('Camel.'), 'camel');
+    expect(cleanTranslation(' Big elephant '), 'big elephant');
+    expect(cleanTranslation('TV'), 'TV');
+    expect(cleanTranslation('ऊंट।'), 'ऊंट');
   });
 
   group('models', () {
@@ -146,27 +94,107 @@ void main() {
             createdAt: DateTime(2026, 10, 22, 9, 30),
             photo: 'media/a1.jpg',
             text: 'We saw a camel.',
-            superSentence: 'We saw a tall camel.',
-            newWords: const [NewWord('tall', 'very high')],
-            stars: 2,
+            labels: const ['Camel', 'Sand'],
+            learned: const [LearnedWord('camel', 'উট', 'Bengali')],
             source: 'gallery',
           ),
         ],
       );
-      final back = DiaryDay.fromJson(day.toJson());
-      expect(back.date, day.date);
-      expect(back.moments.single.text, 'We saw a camel.');
-      expect(back.moments.single.source, 'gallery');
-      expect(back.moments.single.pageText, 'We saw a tall camel.');
-      expect(back.moments.single.newWords.single.meaning, 'very high');
-      expect(back.moments.single.stars, 2);
-      expect(back.moments.single.createdAt, DateTime(2026, 10, 22, 9, 30));
+      final back = DiaryDay.fromJson(day.toJson()).moments.single;
+      expect(back.text, 'We saw a camel.');
+      expect(back.labels, ['Camel', 'Sand']);
+      expect(back.learned.single.from, 'উট');
+      expect(back.learned.single.language, 'Bengali');
+      expect(back.source, 'gallery');
+      expect(back.createdAt, DateTime(2026, 10, 22, 9, 30));
+    });
+
+    test('older days without labels still load', () {
+      final m = Moment.fromJson({'id': 'x', 'createdAt': '2026-10-22T09:00:00.000', 'photo': 'p', 'text': 'Hi.', 'stars': 2});
+      expect(m.labels, isEmpty);
+      expect(m.learned, isEmpty);
     });
 
     test('dates', () {
       expect(dateKey(DateTime(2026, 1, 5)), '2026-01-05');
       expect(prettyDate(DateTime(2026, 10, 22)), 'Thursday, 22 October');
       expect(shortDate(DateTime(2026, 10, 22)), '22 Oct');
+    });
+  });
+
+  test('the word jar holds each learned word once, newest first', () {
+    final jar = collectWords([
+      DiaryDay(date: '2026-10-22', moments: [moment('a', '', learned: ['camel']), moment('b', '', learned: ['kite', 'Camel'])]),
+      DiaryDay(date: '2026-10-21', moments: [moment('c', '', learned: ['river'])]),
+    ]);
+    expect(jar.map((j) => j.word.word), ['kite', 'Camel', 'river']);
+    expect(jar.first.photo, 'media/b.jpg');
+  });
+
+  group('games', () {
+    final r = Random(1);
+    final days = [
+      DiaryDay(
+        date: '2026-10-22',
+        moments: [
+          moment('a', 'We rode a camel in the desert.', labels: ['Camel', 'Sky'], learned: ['kite']),
+          moment('b', 'Big boats.', labels: ['Boat']),
+          moment('c', 'The flamingos were pink!', labels: ['Bird', 'Water']),
+        ],
+      ),
+      DiaryDay(date: '2026-10-21', moments: [moment('d', 'Hi.')]),
+    ];
+
+    test('which photo: every round has its answer among the choices', () {
+      final moments = listenableMoments(days);
+      expect(moments.map((m) => m.id), ['a', 'c']);
+      final rounds = photoRounds(moments, r);
+      expect(rounds, hasLength(2));
+      for (final round in rounds) {
+        expect(round.choices, contains(round.answer));
+        expect(round.choices.toSet(), hasLength(round.choices.length));
+      }
+      expect(photoRounds(moments.take(1).toList(), r), isEmpty);
+    });
+
+    test('kite spell: learned words first, then photo things, then longer words said', () {
+      final words = spellingWords(days, r, count: 10).map((w) => w.word).toList();
+      expect(words.first, 'kite');
+      expect(words.sublist(1, 6).toSet(), {'camel', 'sky', 'boat', 'bird', 'water'});
+      expect(words, containsAll(['rode', 'desert', 'pink']));
+      // Said words over 8 letters are too long to spell with kites.
+      expect(words, isNot(contains('flamingos')));
+      expect(words, isNot(contains('the')));
+      expect(words, isNot(contains('hi')));
+    });
+
+    test('kite spell letters are always muddled', () {
+      for (var i = 0; i < 20; i++) {
+        final s = scrambled('camel', Random(i));
+        expect(s.join(), isNot('camel'));
+        expect(s.toList()..sort(), 'camel'.split('')..sort());
+      }
+      expect(scrambled('aa', r), ['a', 'a']);
+    });
+
+    test('sentence train uses sentences of 3 to 9 words', () {
+      expect(trainSentences(days, r, count: 10).map((m) => m.id).toSet(), {'a', 'c'});
+    });
+
+    test('I-Spy stamps things from the day\'s photos and counts bingo lines', () {
+      final found = spyFinds(days.first);
+      expect(found.keys.toSet(), {Thing.animal, Thing.sky, Thing.ride, Thing.bird, Thing.water});
+      expect(found[Thing.animal]!.id, 'a');
+      expect(bingoLines({Thing.animal, Thing.bird, Thing.tree}), 1);
+      expect(bingoLines({Thing.animal, Thing.building, Thing.people}), 1);
+      expect(bingoLines(Thing.values.toSet()), 8);
+      expect(bingoLines({Thing.animal, Thing.bird}), 0);
+    });
+
+    test('stars', () {
+      expect(starsFor(0, 5), 3);
+      expect(starsFor(3, 5), 2);
+      expect(starsFor(9, 5), 1);
     });
   });
 

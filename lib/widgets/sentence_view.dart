@@ -4,23 +4,19 @@ import '../models.dart';
 import '../theme.dart';
 import '../words.dart';
 
-/// A sentence in big friendly type: new words in a marigold highlight, the
-/// word being read aloud lit up, and words the child has read turned green.
+/// A sentence in big friendly type: learned words in a marigold highlight and
+/// the word being read aloud lit up.
 class SentenceView extends StatelessWidget {
   const SentenceView({
     super.key,
     required this.text,
-    this.newWords = const [],
-    this.matched,
+    this.learned = const [],
     this.speaking,
     this.size = 26,
   });
 
   final String text;
-  final List<NewWord> newWords;
-
-  /// One per word: read back correctly?
-  final List<bool>? matched;
+  final List<LearnedWord> learned;
 
   /// Character range being spoken right now.
   final (int, int)? speaking;
@@ -28,19 +24,18 @@ class SentenceView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fresh = {for (final w in newWords) ...splitWords(w.word).map(bareWord)};
+    final fresh = {for (final w in learned) ...splitWords(w.word).map(bareWord)};
     final spans = <InlineSpan>[];
     final words = wordSpans(text);
     for (var i = 0; i < words.length; i++) {
       final w = words[i];
       final isNew = fresh.contains(bareWord(w.text));
-      final isRead = matched != null && i < matched!.length && matched![i];
       final isSpoken = speaking != null && w.start < speaking!.$2 && w.end > speaking!.$1;
       spans.add(
         TextSpan(
           text: w.text,
           style: TextStyle(
-            color: isRead ? Gj.leaf : (isSpoken ? Gj.kumkum : Gj.ink),
+            color: isSpoken ? Gj.kumkum : Gj.ink,
             background: isSpoken
                 ? (Paint()..color = const Color(0x55FFD54F))
                 : isNew
@@ -61,10 +56,10 @@ class SentenceView extends StatelessWidget {
   }
 }
 
-/// A new word and its meaning, as a tappable chip.
-class NewWordChip extends StatelessWidget {
-  const NewWordChip({super.key, required this.word, this.onTap, this.color = Gj.saffron});
-  final NewWord word;
+/// A learned word and what the child said for it, as a tappable chip.
+class LearnedWordChip extends StatelessWidget {
+  const LearnedWordChip({super.key, required this.word, this.onTap, this.color = Gj.saffron});
+  final LearnedWord word;
   final VoidCallback? onTap;
   final Color color;
 
@@ -92,7 +87,7 @@ class NewWordChip extends StatelessWidget {
                       text: word.word,
                       style: TextStyle(fontWeight: FontWeight.w800, color: Gj.edge(color)),
                     ),
-                    if (word.meaning.isNotEmpty) TextSpan(text: '  ${word.meaning}'),
+                    if (word.from.isNotEmpty) TextSpan(text: '  ${word.from}'),
                   ],
                 ),
                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Gj.ink, height: 1.2),

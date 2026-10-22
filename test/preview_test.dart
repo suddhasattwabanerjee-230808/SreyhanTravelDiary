@@ -11,8 +11,12 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sreyhan_diary/coach.dart';
 import 'package:sreyhan_diary/diary_store.dart';
+import 'package:sreyhan_diary/games/games_screen.dart';
+import 'package:sreyhan_diary/games/ispy_game.dart';
+import 'package:sreyhan_diary/games/kite_spell_game.dart';
+import 'package:sreyhan_diary/games/sentence_train_game.dart';
+import 'package:sreyhan_diary/games/which_photo_game.dart';
 import 'package:sreyhan_diary/main.dart';
 import 'package:sreyhan_diary/models.dart';
 import 'package:sreyhan_diary/screens/day_screen.dart';
@@ -20,6 +24,8 @@ import 'package:sreyhan_diary/screens/moment_screen.dart';
 import 'package:sreyhan_diary/screens/word_jar_screen.dart';
 import 'package:sreyhan_diary/sound_board.dart';
 import 'package:sreyhan_diary/speaker.dart';
+import 'package:sreyhan_diary/translate.dart';
+import 'package:sreyhan_diary/vision.dart';
 import 'package:sreyhan_diary/voice.dart';
 import 'package:sreyhan_diary/widgets/mic_button.dart';
 
@@ -59,22 +65,18 @@ class FakeVoice implements VoiceInput {
   Future<void> cancel() async => _on = false;
 }
 
-const superSentence = 'I saw a tall brown camel resting in the sparkly white desert.';
+class FakeLabeler implements PhotoLabeler {
+  @override
+  Future<List<String>> labels(String path) async => const ['Camel', 'Desert', 'Sky'];
+}
 
-class FakeCoach implements Coach {
+class FakeTranslator implements WordTranslator {
   @override
-  bool get online => true;
+  Future<bool> isReady(HomeLanguage lang) async => true;
   @override
-  Future<CoachQuestions?> ask(String photoPath, String said) async =>
-      const CoachQuestions('Wow, a camel in the desert!', ['What colour was its saddle?', 'Was the sand hot?']);
+  Future<bool> prepare(HomeLanguage lang) async => true;
   @override
-  Future<SuperSentence?> polish(String photoPath, String said) async => const SuperSentence(
-    sentences: [superSentence],
-    praise: 'Super describing!',
-    newWords: [NewWord('resting', 'taking a break'), NewWord('sparkly', 'shining with little lights')],
-  );
-  @override
-  Future<BridgeWord?> bridge(String said) async => const BridgeWord('camel', 'A camel has a hump.');
+  Future<String?> toEnglish(String text, HomeLanguage lang) async => 'hump';
 }
 
 class SilentSpeaker implements Speaker {
@@ -174,7 +176,8 @@ void main() {
           sounds: SoundBoard.silent(),
           voice: voice,
           pickPhoto: ({required bool camera}) async => photos.first,
-          coach: FakeCoach(),
+          labeler: FakeLabeler(),
+          translator: FakeTranslator(),
           speaker: SilentSpeaker(),
           now: () => now,
         ),
@@ -223,9 +226,13 @@ void main() {
               createdAt: now.subtract(Duration(days: d * (d + 1), hours: m * 3)),
               photo: await store.importPhoto(photos[(d + m) % photos.length], id),
               text: texts[(d + m) % texts.length],
-              superSentence: m == 0 ? superSentence : null,
-              newWords: m == 0 ? [NewWord(['resting', 'sparkly', 'gigantic', 'graceful'][d], 'a word Sheru taught')] : const [],
-              stars: m == 0 ? 3 - d % 3 : 0,
+              labels: [
+                ['Camel', 'Sky'],
+                ['Bird', 'Lake'],
+                ['Food', 'Temple'],
+                ['Bus', 'Tree'],
+              ][(d + m) % 4],
+              learned: m == 0 ? [LearnedWord(['hump', 'feather', 'sweet', 'river'][d], 'উট', 'Bengali')] : const [],
             ),
           );
         }
@@ -245,32 +252,45 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
     await shot(tester, '5_moment_listening');
 
-    // Tap again: done, all the words as bubbles, and Sheru asks about the photo.
+    // Tap again: done, all the words as bubbles, and Sheru asks about the camel.
     await tester.tap(find.byType(MicButton));
     await shot(tester, '6_moment_words');
 
-    // Tap a word to fix it.
+    // Tap a word: it opens for typing.
     await tester.tap(find.text('camel').first);
-    await shot(tester, '7_moment_fix_word');
-    await tester.tap(find.text('Keep'));
+    await shot(tester, '7_moment_edit_word');
+    await tester.enterText(find.byType(TextField), 'camels');
+    await tester.tap(find.text('OK'));
     await tester.pump();
 
-    // Done: the Super Sentence.
-    await tester.tap(find.text('Done'));
-    await shot(tester, '8_super_sentence');
-
-    // Read it back: all the words go green, three stars.
-    voice.sentence = superSentence;
+    // Say a word in Bengali: its English, ready to add.
+    voice.sentence = 'কুঁজ';
+    await tester.tap(find.textContaining('বাংলা'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
     await tester.tap(find.byType(MicButton));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
-    await tester.tap(find.byType(MicButton));
-    await shot(tester, '9_read_back');
+    await shot(tester, '8_moment_bengali');
 
     await pumpApp(tester, screen: DayScreen(date: dateKey(now)));
-    await shot(tester, '10_day');
+    await shot(tester, '9_day');
 
     await pumpApp(tester, screen: const WordJarScreen());
-    await shot(tester, '11_word_jar');
+    await shot(tester, '10_word_jar');
+
+    await pumpApp(tester, screen: const GamesScreen());
+    await shot(tester, '11_games');
+
+    await pumpApp(tester, screen: const WhichPhotoGame(seed: 3));
+    await shot(tester, '12_which_photo');
+
+    await pumpApp(tester, screen: const KiteSpellGame(seed: 3));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await shot(tester, '13_kite_spell');
+
+    await pumpApp(tester, screen: const SentenceTrainGame(seed: 3));
+    await shot(tester, '14_sentence_train');
+
+    await pumpApp(tester, screen: const ISpyGame());
+    await shot(tester, '15_ispy');
 
     await tester.runAsync(() async => tmp.deleteSync(recursive: true));
   });

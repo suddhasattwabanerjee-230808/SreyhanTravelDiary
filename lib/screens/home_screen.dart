@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
 import '../diary_store.dart';
+import '../games/games_screen.dart';
 import '../models.dart';
 import '../sound_board.dart';
 import '../theme.dart';
@@ -61,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String get _sheruSays {
     final n = _todayDay.moments.length;
     final greetings = [
-      'Kem cho, $childName! What did you see today?',
+      'Hello, $childName! What did you see today?',
       'Take a photo and tell me all about it!',
       "Let's fill today's kite with pictures!",
       if (_earlier.isNotEmpty) 'Tap an old kite to read that day again!',
@@ -154,7 +155,23 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 10, 24, 16),
-                child: KutchButton(label: 'Add a picture', icon: Icons.add_a_photo_rounded, onTap: _addMoment),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: KutchButton(label: 'Add a picture', icon: Icons.add_a_photo_rounded, onTap: _addMoment),
+                    ),
+                    const SizedBox(width: 12),
+                    BlobButton(
+                      icon: Icons.sports_esports_rounded,
+                      color: Gj.kumkum,
+                      size: 66,
+                      label: 'Games',
+                      sound: Sfx.whoosh,
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const GamesScreen())),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0] - 2026-10-22
+
+### Added
+- Games corner with four games made from the child's own diary:
+  - **Which Photo?**: Sheru reads one of their sentences; tap its photo.
+  - **Kite Spell**: tap letter kites in order to spell a word from the trip.
+  - **Sentence Train**: put a jumbled diary sentence's carriages in order.
+  - **Travel I-Spy**: a daily bingo card of nine things to find; squares
+    stamp themselves when a photo shows them.
+- Tap a word bubble to fix it with the keyboard (or pop it, or say it again).
+- Say a word in Bengali or Hindi to get it in English (on-device ML Kit
+  translation); added words fill the Word Jar.
+- Sheru's questions now come from what the phone sees in the photo
+  (on-device ML Kit labels), e.g. "I see a camel! What colour was it?".
+
+### Removed
+- The Super Sentence, read-back stars and the Claude coach (coach-worker):
+  everything now runs free on the phone.
+- Gujarati word bridge (replaced by Bengali and Hindi).
+
+### Changed
+- Sheru speaks English only ("Hello" and "Well done" instead of "Kem cho"
+  and "Shabash").
+
 ## [0.2.0] - 2026-10-22
 
 ### Added

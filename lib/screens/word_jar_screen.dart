@@ -8,10 +8,10 @@ import '../widgets/playful.dart';
 import '../widgets/sheru.dart';
 import '../words.dart';
 
-/// A word Sheru taught, with the photo it came from.
+/// A learned word, with the photo it came from.
 class JarWord {
   const JarWord(this.word, this.photo, this.date);
-  final NewWord word;
+  final LearnedWord word;
   final String photo;
   final String date;
 }
@@ -22,7 +22,7 @@ List<JarWord> collectWords(List<DiaryDay> days) {
   final out = <JarWord>[];
   for (final d in days) {
     for (final m in d.moments.reversed) {
-      for (final w in m.newWords) {
+      for (final w in m.learned) {
         if (seen.add(bareWord(w.word))) out.add(JarWord(w, m.photo, d.date));
       }
     }
@@ -59,7 +59,7 @@ class _WordJarScreenState extends State<WordJarScreen> {
     app.sounds.play(Sfx.pop);
     setState(() => _saying = w.word.word);
     await app.sounds.hush();
-    await app.speaker.say(w.word.meaning.isEmpty ? w.word.word : '${w.word.word}. ${w.word.meaning}');
+    await app.speaker.say(w.word.word);
     await app.sounds.unhush();
     if (mounted) setState(() => _saying = null);
   }
@@ -95,7 +95,10 @@ class _WordJarScreenState extends State<WordJarScreen> {
                     ? const Center(
                         child: Padding(
                           padding: EdgeInsets.all(24),
-                          child: SheruSays('Make a Super Sentence, and new words will fill your jar!', size: 110),
+                          child: SheruSays(
+                            'Say a word in Bengali or Hindi while you talk, and its English will fill your jar!',
+                            size: 110,
+                          ),
                         ),
                       )
                     : CustomScrollView(
@@ -194,7 +197,7 @@ class _WordCard extends StatelessWidget {
                       style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Gj.edge(color), height: 1.1),
                     ),
                     Text(
-                      word.word.meaning,
+                      '${word.word.language}: ${word.word.from}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Gj.inkSoft, height: 1.15),

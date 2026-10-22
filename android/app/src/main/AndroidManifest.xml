@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Speech to text: the phone's recogniser needs the microphone. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-    <!-- Sheru's coach (coach-worker/). -->
+    <!-- The one-time Bengali/Hindi translation download (ML Kit). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="@string/app_name"

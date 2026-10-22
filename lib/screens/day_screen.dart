@@ -145,7 +145,7 @@ class _MomentPageState extends State<_MomentPage> {
     final app = App.of(context);
     await app.sounds.hush();
     await app.speaker.say(
-      widget.moment.pageText,
+      widget.moment.text,
       onWord: (start, end) {
         if (mounted) setState(() => _speaking = (start, end));
       },
@@ -172,7 +172,7 @@ class _MomentPageState extends State<_MomentPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: SentenceView(text: m.pageText, newWords: m.newWords, speaking: _speaking, size: 22)),
+                Expanded(child: SentenceView(text: m.text, learned: m.learned, speaking: _speaking, size: 22)),
                 const SizedBox(width: 8),
                 BlobButton(
                   icon: Icons.volume_up_rounded,
@@ -182,32 +182,18 @@ class _MomentPageState extends State<_MomentPage> {
                 ),
               ],
             ),
-            if (m.superSentence != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'In my words: ${m.text}',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Gj.inkSoft, height: 1.2),
-              ),
-            ],
-            if (m.newWords.isNotEmpty) ...[
+            if (m.learned.isNotEmpty) ...[
               const SizedBox(height: 8),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  for (final w in m.newWords)
-                    NewWordChip(word: w, onTap: () => app.speaker.say(w.meaning.isEmpty ? w.word : '${w.word}. ${w.meaning}')),
+                  for (final w in m.learned) LearnedWordChip(word: w, onTap: () => app.speaker.say(w.word)),
                 ],
               ),
             ],
             const SizedBox(height: 6),
-            Row(
-              children: [
-                Text(time, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Gj.inkSoft)),
-                const Spacer(),
-                if (m.stars > 0) StarRow(m.stars, size: 24),
-              ],
-            ),
+            Text(time, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Gj.inkSoft)),
           ],
         ),
       ),

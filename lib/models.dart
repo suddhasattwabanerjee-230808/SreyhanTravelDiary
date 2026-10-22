@@ -1,12 +1,20 @@
-/// A word Sheru taught, with a child-friendly meaning.
-class NewWord {
-  const NewWord(this.word, this.meaning);
+/// An English word the child found by saying it in Bengali or Hindi.
+class LearnedWord {
+  const LearnedWord(this.word, this.from, this.language);
+
+  /// The English.
   final String word;
-  final String meaning;
 
-  Map<String, dynamic> toJson() => {'word': word, 'meaning': meaning};
+  /// What the child said, as speech-to-text wrote it (Bengali or Hindi script).
+  final String from;
 
-  factory NewWord.fromJson(Map<String, dynamic> j) => NewWord(j['word'] as String, (j['meaning'] as String?) ?? '');
+  /// 'Bengali' or 'Hindi'.
+  final String language;
+
+  Map<String, dynamic> toJson() => {'word': word, 'from': from, 'language': language};
+
+  factory LearnedWord.fromJson(Map<String, dynamic> j) =>
+      LearnedWord(j['word'] as String, (j['from'] as String?) ?? '', (j['language'] as String?) ?? '');
 }
 
 /// One photo and what the child said about it.
@@ -16,9 +24,8 @@ class Moment {
     required this.createdAt,
     required this.photo,
     required this.text,
-    this.superSentence,
-    this.newWords = const [],
-    this.stars = 0,
+    this.labels = const [],
+    this.learned = const [],
     this.source = 'camera',
   });
 
@@ -28,30 +35,25 @@ class Moment {
   /// Paths are relative to the diary folder, so a backup can move phones.
   final String photo;
 
-  /// The child's own words.
+  /// The child's words.
   final String text;
 
-  /// Sheru's polished version of [text], which the child read back.
-  final String? superSentence;
-  final List<NewWord> newWords;
+  /// What's in the photo, as the phone recognised it ("Camel", "Sky").
+  final List<String> labels;
 
-  /// 0 to 3, for reading the Super Sentence aloud.
-  final int stars;
+  /// Words translated into English while talking about this photo.
+  final List<LearnedWord> learned;
 
   /// 'camera' or 'gallery'.
   final String source;
-
-  /// What the diary page shows: the Super Sentence when there is one.
-  String get pageText => superSentence ?? text;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'createdAt': createdAt.toIso8601String(),
     'photo': photo,
     'text': text,
-    if (superSentence != null) 'superSentence': superSentence,
-    if (newWords.isNotEmpty) 'newWords': [for (final w in newWords) w.toJson()],
-    if (stars > 0) 'stars': stars,
+    if (labels.isNotEmpty) 'labels': labels,
+    if (learned.isNotEmpty) 'learned': [for (final w in learned) w.toJson()],
     'source': source,
   };
 
@@ -60,9 +62,8 @@ class Moment {
     createdAt: DateTime.parse(j['createdAt'] as String),
     photo: j['photo'] as String,
     text: (j['text'] as String?) ?? '',
-    superSentence: j['superSentence'] as String?,
-    newWords: [for (final w in (j['newWords'] as List? ?? const [])) NewWord.fromJson(w as Map<String, dynamic>)],
-    stars: (j['stars'] as num?)?.toInt() ?? 0,
+    labels: [for (final l in (j['labels'] as List? ?? const [])) l as String],
+    learned: [for (final w in (j['learned'] as List? ?? const [])) LearnedWord.fromJson(w as Map<String, dynamic>)],
     source: (j['source'] as String?) ?? 'camera',
   );
 }

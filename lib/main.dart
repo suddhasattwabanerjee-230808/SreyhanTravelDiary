@@ -3,13 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'app_scope.dart';
-import 'coach.dart';
 import 'diary_store.dart';
-import 'env.dart';
 import 'screens/home_screen.dart';
 import 'sound_board.dart';
 import 'speaker.dart';
+import 'translate.dart';
 import 'theme.dart';
+import 'vision.dart';
 import 'voice.dart';
 
 Future<void> main() async {
@@ -23,7 +23,8 @@ Future<void> main() async {
       sounds: sounds,
       voice: DeviceVoiceInput(),
       pickPhoto: pickPhotoFromDevice,
-      coach: HttpCoach(coachUrl, coachToken),
+      labeler: DeviceLabeler(),
+      translator: DeviceTranslator(),
       speaker: DeviceSpeaker(),
     ),
   );
@@ -47,7 +48,8 @@ class DiaryApp extends StatefulWidget {
     required this.sounds,
     required this.voice,
     required this.pickPhoto,
-    required this.coach,
+    required this.labeler,
+    required this.translator,
     required this.speaker,
     this.now = DateTime.now,
   });
@@ -56,7 +58,8 @@ class DiaryApp extends StatefulWidget {
   final SoundBoard sounds;
   final VoiceInput voice;
   final PhotoPicker pickPhoto;
-  final Coach coach;
+  final PhotoLabeler labeler;
+  final WordTranslator translator;
   final Speaker speaker;
   final DateTime Function() now;
 
@@ -95,7 +98,8 @@ class _DiaryAppState extends State<DiaryApp> with WidgetsBindingObserver {
       sounds: widget.sounds,
       voice: widget.voice,
       pickPhoto: widget.pickPhoto,
-      coach: widget.coach,
+      labeler: widget.labeler,
+      translator: widget.translator,
       speaker: widget.speaker,
       now: widget.now,
       child: MaterialApp(

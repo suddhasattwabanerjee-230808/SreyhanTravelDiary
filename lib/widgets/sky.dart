@@ -269,9 +269,13 @@ class FlyingKite extends StatefulWidget {
     this.phase = 0,
     this.glow = false,
     this.onTap,
+    this.badge = 0.4,
   });
 
   final double width;
+
+  /// The size of the round label in the middle, as a share of the width.
+  final double badge;
   final Color color, accent;
 
   /// Drawn in the middle of the kite (a +, a number...).
@@ -329,12 +333,12 @@ class _FlyingKiteState extends State<FlyingKite> with SingleTickerProviderStateM
               Positioned(
                 left: 0,
                 right: 0,
-                top: w * 1.05 * 0.42 - w * 0.2,
-                height: w * 0.4,
+                top: w * 1.05 * 0.42 - w * widget.badge / 2,
+                height: w * widget.badge,
                 child: Center(
                   child: Container(
-                    width: w * 0.4,
-                    height: w * 0.4,
+                    width: w * widget.badge,
+                    height: w * widget.badge,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: Colors.white,

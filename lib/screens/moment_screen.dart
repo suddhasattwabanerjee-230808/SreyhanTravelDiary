@@ -1,24 +1,22 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
-import '../coach.dart';
 import '../diary_store.dart';
 import '../models.dart';
 import '../sound_board.dart';
 import '../theme.dart';
+import '../translate.dart';
+import '../vision.dart';
 import '../voice.dart';
 import '../widgets/mic_button.dart';
 import '../widgets/playful.dart';
-import '../widgets/sentence_view.dart';
 import '../widgets/sheru.dart';
 import '../words.dart';
 
-/// Sheru's own questions, for when the coach is offline (and after its
-/// questions about the photo run out).
+/// Sheru's own questions, after his questions about the photo run out.
 const offlinePrompts = [
   'What is in your photo?',
   'Where were you?',
@@ -30,13 +28,11 @@ const offlinePrompts = [
 ];
 
 /// What the mic is listening for.
-enum _Mode { words, replace, bridge, readBack }
+enum _Mode { words, replace, bridge }
 
-/// Talk about the photo, see it as a Super Sentence, read it back.
-enum _Step { talk, polishing, read }
-
-/// Add a moment: pick a photo, talk about it while Sheru asks questions, then
-/// read Sheru's Super Sentence back aloud for stars. No keyboard anywhere.
+/// Add a moment: pick a photo, then talk about it while Sheru asks questions
+/// about what's in it. Words appear as bubbles; tap one to fix it with the
+/// keyboard. Say a word in Bengali or Hindi to get it in English.
 class MomentScreen extends StatefulWidget {
   const MomentScreen({super.key, this.initialPhoto});
 
@@ -48,10 +44,14 @@ class MomentScreen extends StatefulWidget {
 }
 
 class _MomentScreenState extends State<MomentScreen> {
-  late String? _photo = widget.initialPhoto;
+  String? _photo;
   String _source = 'camera';
   final _id = DiaryStore.newId();
-  _Step _step = _Step.talk;
+
+  // What's in the photo, and Sheru's questions about it.
+  var _labels = <String>[];
+  var _questions = <String>[];
+  int _prompt = 0;
 
   // Talking.
   var _words = <String>[];
@@ -60,40 +60,39 @@ class _MomentScreenState extends State<MomentScreen> {
   _Mode _mode = _Mode.words;
   bool _busy = false;
   double _level = 0;
-  int? _selected;
   int? _replacing;
   String? _sheruSays;
   bool _celebrating = false;
   VoiceReady _voiceReady = VoiceReady.ready;
 
-  // Sheru's questions about the photo.
-  var _questions = <String>[];
-  bool _asked = false;
-  bool _thinking = false;
-  int _prompt = 0;
+  // Fixing a bubble with the keyboard.
+  int? _editing;
+  final _editText = TextEditingController();
+  final _editFocus = FocusNode();
+  final _editKey = GlobalKey();
 
-  // The Gujarati/Hindi word bridge.
-  BridgeWord? _bridged;
-
-  // The Super Sentence and reading it back.
-  SuperSentence? _super;
-  ReadBack? _read;
-  int _bestStars = 0;
-  (int, int)? _speaking;
+  // Bengali/Hindi to English.
+  HomeLanguage? _bridgeLang;
+  bool _preparing = false;
+  LearnedWord? _bridged;
+  final _learned = <LearnedWord>[];
 
   App get _app => App.of(context);
-  bool get _online => _app.coach.online;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkVoice());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkVoice();
+      if (widget.initialPhoto != null) _usePhoto(widget.initialPhoto!, 'camera');
+    });
   }
 
   @override
-  void deactivate() {
-    _app.speaker.stop();
-    super.deactivate();
+  void dispose() {
+    _editText.dispose();
+    _editFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _checkVoice() async {
@@ -102,25 +101,19 @@ class _MomentScreenState extends State<MomentScreen> {
     setState(() => _voiceReady = ready);
   }
 
-  List<String> get _prompts => [..._questions, ...offlinePrompts.skip(1)];
-
   String get _message {
     if (_sheruSays != null) return _sheruSays!;
     if (_voiceReady == VoiceReady.noPermission) return 'Ask a grown-up to let me use the microphone!';
     if (_voiceReady == VoiceReady.unavailable) return "This phone can't turn talking into words yet. Ask a grown-up!";
-    switch (_step) {
-      case _Step.polishing:
-        return "I'm making your Super Sentence...";
-      case _Step.read:
-        if (_listening) return 'Read it out loud!';
-        return 'Here is your Super Sentence! Tap the mic and read it to me.';
-      case _Step.talk:
-        if (_listening && _mode == _Mode.bridge) return 'Say the word in Gujarati or Hindi!';
-        if (_thinking) return 'Hmm, let me look at your photo...';
-        if (_replacing != null) return 'Say the new word!';
-        if (_words.isEmpty) return offlinePrompts[0];
-        return _prompts[_prompt % _prompts.length];
+    if (_listening && _mode == _Mode.bridge) return 'Say the word in ${_bridgeLang!.name}!';
+    if (_editing != null) return 'Fix the spelling, or type a new word!';
+    if (_replacing != null) return 'Say the new word!';
+    if (_words.isEmpty) {
+      final seen = _labels.where((l) => thingOf(l) != null).firstOrNull;
+      return seen == null ? offlinePrompts[0] : 'I think I see ${seen.toLowerCase()}! Tell me about your photo.';
     }
+    final prompts = [..._questions, ...offlinePrompts.skip(1)];
+    return prompts[(_prompt - 1) % prompts.length];
   }
 
   // --- Photo ------------------------------------------------------------------
@@ -129,32 +122,42 @@ class _MomentScreenState extends State<MomentScreen> {
     final path = await _app.pickPhoto(camera: camera);
     if (path == null || !mounted) return;
     _app.sounds.play(camera ? Sfx.shutter : Sfx.sparkle);
+    _usePhoto(path, camera ? 'camera' : 'gallery');
+  }
+
+  /// Shows the photo straight away; Sheru's questions follow once the phone
+  /// has looked at it.
+  Future<void> _usePhoto(String path, String source) async {
     setState(() {
       _photo = path;
-      _source = camera ? 'camera' : 'gallery';
+      _source = source;
       _sheruSays = null;
-      // A new photo deserves new questions.
-      _asked = false;
+      _labels = [];
       _questions = [];
+    });
+    final labels = await _app.labeler.labels(path);
+    if (!mounted || _photo != path) return;
+    setState(() {
+      _labels = labels;
+      _questions = photoQuestions(labels);
     });
   }
 
   // --- Listening --------------------------------------------------------------
 
-  void _tapMic() => _listening ? _stopTalking() : _startTalking(_step == _Step.read ? _Mode.readBack : _Mode.words);
+  void _tapMic() => _listening ? _stopTalking() : _startTalking(_Mode.words);
 
   /// Listens until the mic is tapped again. Fixing a word or saying a
-  /// Gujarati/Hindi word stops by itself once something is heard; reading
-  /// back stops as soon as every word has been read.
+  /// Bengali/Hindi word stops by itself once something is heard.
   Future<void> _startTalking(_Mode mode) async {
     if (_listening || _busy) return;
+    _commitEdit();
     setState(() {
       _mode = mode;
       _listening = true;
       _live = '';
       _sheruSays = null;
       _bridged = null;
-      if (mode == _Mode.readBack) _read = null;
     });
     await _app.speaker.stop();
     await _app.sounds.hush();
@@ -163,33 +166,27 @@ class _MomentScreenState extends State<MomentScreen> {
     await Future.delayed(const Duration(milliseconds: 280));
     if (!mounted || !_listening) return;
     final ok = await _app.voice.start(
-      onText: _onText,
+      onText: (t) {
+        if (mounted) setState(() => _live = t);
+      },
       onLevel: (l) {
         if (mounted) setState(() => _level = l);
       },
-      oneShot: mode == _Mode.replace || mode == _Mode.bridge,
-      languages: mode == _Mode.bridge ? const ['gu_IN', 'hi_IN'] : null,
+      oneShot: mode != _Mode.words,
+      languages: mode == _Mode.bridge ? _bridgeLang!.speechLocales : null,
       onEnded: _stopTalking,
     );
     if (!ok && mounted) {
       setState(() {
         _listening = false;
+        _replacing = null;
         _sheruSays = mode == _Mode.bridge
-            ? "This phone can't hear Gujarati or Hindi yet. Ask a grown-up!"
+            ? "This phone can't hear ${_bridgeLang!.name} yet. Ask a grown-up!"
             : "Oh no, I can't hear right now. Ask a grown-up to help!";
       });
       await _app.sounds.unhush();
       if (mode != _Mode.bridge) unawaited(_checkVoice());
     }
-  }
-
-  void _onText(String t) {
-    if (!mounted) return;
-    setState(() {
-      _live = t;
-      if (_mode == _Mode.readBack) _read = scoreReading(_super!.text, t);
-    });
-    if (_mode == _Mode.readBack && _read!.all) _stopTalking();
   }
 
   Future<void> _stopTalking() async {
@@ -204,142 +201,93 @@ class _MomentScreenState extends State<MomentScreen> {
       _level = 0;
       _live = '';
     });
+    if (said.isEmpty) {
+      _app.sounds.play(Sfx.oops);
+      setState(() {
+        _replacing = null;
+        _sheruSays = "I didn't hear anything. Tap the mic and talk!";
+      });
+      return;
+    }
     switch (_mode) {
       case _Mode.words:
-        _heardWords(said);
+        _app.sounds.play(Sfx.sparkle);
+        setState(() {
+          _words = [..._words, ...splitWords(said)];
+          _prompt++;
+        });
       case _Mode.replace:
-        _heardReplacement(said);
+        _app.sounds.play(Sfx.sparkle);
+        setState(() {
+          _words = replaceWord(_words, _replacing!, said);
+          _replacing = null;
+          _sheruSays = 'Fixed it!';
+        });
       case _Mode.bridge:
-        await _heardBridge(said);
-      case _Mode.readBack:
-        _heardReading(said);
+        await _translate(said);
     }
   }
 
-  void _nothingHeard() {
-    _app.sounds.play(Sfx.oops);
-    setState(() {
-      _replacing = null;
-      _sheruSays = "I didn't hear anything. Tap the mic and talk!";
-    });
-  }
-
-  void _heardWords(String said) {
-    if (said.isEmpty) return _nothingHeard();
-    _app.sounds.play(Sfx.sparkle);
-    setState(() {
-      _words = [..._words, ...splitWords(said)];
-      _prompt++;
-    });
-    // After the first description, Sheru looks at the photo and asks about it.
-    if (!_asked && _online) _askCoach();
-  }
-
-  Future<void> _askCoach() async {
-    _asked = true;
-    setState(() => _thinking = true);
-    final q = await _app.coach.ask(_photo!, joinWords(_words));
-    if (!mounted) return;
-    setState(() {
-      _thinking = false;
-      if (q == null) return;
-      _questions = q.questions;
-      _prompt = 0;
-      _sheruSays = q.praise.isEmpty ? null : '${q.praise} ${q.questions.first}';
-    });
-  }
-
-  void _heardReplacement(String said) {
-    if (said.isEmpty) return _nothingHeard();
-    _app.sounds.play(Sfx.sparkle);
-    setState(() {
-      _words = replaceWord(_words, _replacing!, said);
-      _replacing = null;
-      _selected = null;
-      _sheruSays = 'Fixed it!';
-    });
-  }
-
-  Future<void> _heardBridge(String said) async {
-    if (said.isEmpty) return _nothingHeard();
-    setState(() {
-      _thinking = true;
-      _sheruSays = 'Hmm, "$said"... let me think!';
-    });
-    final b = await _app.coach.bridge(said);
-    if (!mounted) return;
-    _app.sounds.play(b == null ? Sfx.oops : Sfx.sparkle);
-    setState(() {
-      _thinking = false;
-      _bridged = b;
-      _sheruSays = b == null
-          ? "I don't know that one yet. Can you say it another way?"
-          : 'In English, that\'s "${b.english}"! ${b.sentence}';
-    });
-    if (b != null) unawaited(_app.speaker.say('${b.english}. ${b.sentence}'));
-  }
-
-  void _addBridged() {
-    final b = _bridged!;
-    setState(() {
-      _words = [..._words, ...splitWords(b.english.toLowerCase())];
-      _bridged = null;
-      _sheruSays = 'Added "${b.english}" to your words!';
-    });
-  }
-
-  void _heardReading(String said) {
-    if (said.isEmpty) return _nothingHeard();
-    final r = scoreReading(_super!.text, said);
-    _bestStars = max(_bestStars, r.stars);
-    setState(() {
-      _read = r;
-      _sheruSays = switch (r.stars) {
-        3 => 'Wah! You read it all! Three stars!',
-        2 => 'So good! Read it once more for three stars?',
-        1 => 'Nice try! Listen to me, then read again.',
-        _ => "Let's read it together. Tap the speaker to hear it first!",
-      };
-    });
-    if (r.stars == 3) {
-      _app.sounds.play(Sfx.dhol);
-      ConfettiBurst.show(context);
-    } else {
-      _app.sounds.play(r.stars > 0 ? Sfx.sparkle : Sfx.oops);
-    }
-  }
-
-  // --- Fixing words -----------------------------------------------------------
+  // --- Fixing a bubble --------------------------------------------------------
 
   void _tapWord(int i) {
     if (_listening) return;
+    if (_editing == i) return;
+    _commitEdit();
     _app.sounds.play(Sfx.pop);
+    _editText.text = _words[i];
+    _editText.selection = TextSelection.collapsed(offset: _editText.text.length);
     setState(() {
-      _selected = _selected == i ? null : i;
-      _replacing = null;
-      _sheruSays = _selected == null ? null : 'Say it again, or pop it?';
+      _editing = i;
+      _sheruSays = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _editFocus.requestFocus();
+      // Once the keyboard is up, keep the word being fixed in view.
+      Future.delayed(const Duration(milliseconds: 400), () {
+        final ctx = _editKey.currentContext;
+        if (ctx != null && ctx.mounted) Scrollable.ensureVisible(ctx, alignment: 0.3, duration: const Duration(milliseconds: 250));
+      });
     });
   }
 
-  void _sayAgain() {
-    setState(() => _replacing = _selected);
-    _startTalking(_Mode.replace);
+  /// Keeps what was typed. An emptied bubble disappears; typing a space
+  /// makes two bubbles.
+  void _commitEdit() {
+    final i = _editing;
+    if (i == null) return;
+    setState(() {
+      if (i < _words.length) _words = replaceWord(_words, i, _editText.text);
+      _editing = null;
+    });
+    _editFocus.unfocus();
   }
 
-  void _popWord() {
+  void _popEditing() {
+    final i = _editing!;
+    _editFocus.unfocus();
     setState(() {
-      _words = removeWord(_words, _selected!);
-      _selected = null;
-      _replacing = null;
+      _words = removeWord(_words, i);
+      _editing = null;
       _sheruSays = 'Pop!';
     });
+  }
+
+  void _sayEditing() {
+    final i = _editing!;
+    _editFocus.unfocus();
+    setState(() {
+      _editing = null;
+      _replacing = i;
+    });
+    _startTalking(_Mode.replace);
   }
 
   void _startOver() {
     _app.sounds.play(Sfx.whoosh);
     setState(() {
       _words = [];
-      _selected = null;
+      _editing = null;
       _replacing = null;
       _bridged = null;
       _prompt = 0;
@@ -347,77 +295,70 @@ class _MomentScreenState extends State<MomentScreen> {
     });
   }
 
-  // --- The Super Sentence -----------------------------------------------------
+  // --- Bengali/Hindi to English -----------------------------------------------
 
-  Future<void> _makeSuperSentence() async {
-    if (_words.isEmpty || _busy) return;
-    final said = joinWords(_words);
-    setState(() {
-      _step = _Step.polishing;
-      _selected = null;
-      _bridged = null;
-      _sheruSays = null;
-    });
-    final polished = _online ? await _app.coach.polish(_photo!, said) : null;
+  Future<void> _bridge(HomeLanguage lang) async {
+    _commitEdit();
+    _bridgeLang = lang;
+    if (!await _app.translator.isReady(lang)) {
+      setState(() {
+        _preparing = true;
+        _sheruSays = 'Getting ${lang.name} ready... only the first time!';
+      });
+      final ok = await _app.translator.prepare(lang);
+      if (!mounted) return;
+      setState(() => _preparing = false);
+      if (!ok) {
+        _app.sounds.play(Sfx.oops);
+        setState(() => _sheruSays = 'I need the internet once to learn ${lang.name}. Ask a grown-up!');
+        return;
+      }
+    }
+    await _startTalking(_Mode.bridge);
+  }
+
+  Future<void> _translate(String said) async {
+    final lang = _bridgeLang!;
+    setState(() => _sheruSays = 'Hmm, "$said"... let me think!');
+    final english = await _app.translator.toEnglish(said, lang);
     if (!mounted) return;
-    _app.sounds.play(Sfx.sparkle);
+    _app.sounds.play(english == null ? Sfx.oops : Sfx.sparkle);
     setState(() {
-      _super = polished ?? offlinePolish(said);
-      _step = _Step.read;
-      _read = null;
-      _bestStars = 0;
-      _sheruSays = _super!.praise.isEmpty ? null : '${_super!.praise} Tap the mic and read it to me.';
+      _bridged = english == null ? null : LearnedWord(english, said, lang.name);
+      _sheruSays = english == null
+          ? "I couldn't find that one. Can you say it again?"
+          : '"$said" in English is "$english"!';
     });
-    unawaited(_hear());
+    if (english != null) unawaited(_app.speaker.say(english));
   }
 
-  /// Sheru reads the Super Sentence, lighting up each word.
-  Future<void> _hear() async {
-    if (_listening || _super == null) return;
-    await _app.sounds.hush();
-    await _app.speaker.say(
-      _super!.text,
-      onWord: (start, end) {
-        if (mounted) setState(() => _speaking = (start, end));
-      },
-    );
-    await _app.sounds.unhush();
-    if (mounted) setState(() => _speaking = null);
-  }
-
-  void _sayWord(NewWord w) {
-    _app.sounds.play(Sfx.pop);
-    _app.speaker.say(w.meaning.isEmpty ? w.word : '${w.word}. ${w.meaning}');
-  }
-
-  void _backToTalking() {
-    _app.speaker.stop();
+  void _addBridged() {
+    final b = _bridged!;
     setState(() {
-      _step = _Step.talk;
-      _sheruSays = 'Add more, or change your words!';
+      _words = [..._words, ...splitWords(b.word)];
+      if (!_learned.any((w) => bareWord(w.word) == bareWord(b.word))) _learned.add(b);
+      _bridged = null;
+      _sheruSays = 'Added "${b.word}"! It\'s in your Word Jar too.';
     });
   }
 
   // --- Saving -----------------------------------------------------------------
 
   Future<void> _save() async {
+    _commitEdit();
     if (_words.isEmpty || _photo == null || _busy) return;
     setState(() => _busy = true);
     await _app.speaker.stop();
     final store = _app.store;
-    final now = _app.now();
-    final text = tidySentence(joinWords(_words));
-    final polished = _super?.text;
     final photo = await store.importPhoto(_photo!, _id);
     await store.addMoment(
       Moment(
         id: _id,
-        createdAt: now,
+        createdAt: _app.now(),
         photo: photo,
-        text: text,
-        superSentence: polished == null || polished == text ? null : polished,
-        newWords: _super?.newWords ?? const [],
-        stars: _bestStars,
+        text: tidySentence(joinWords(_words)),
+        labels: _labels,
+        learned: List.of(_learned),
         source: _source,
       ),
     );
@@ -426,7 +367,7 @@ class _MomentScreenState extends State<MomentScreen> {
     ConfettiBurst.show(context);
     setState(() {
       _celebrating = true;
-      _sheruSays = 'Shabash! It\'s in your diary!';
+      _sheruSays = "Well done! It's in your diary!";
     });
     await Future.delayed(const Duration(milliseconds: 1800));
     if (mounted) Navigator.of(context).pop(true);
@@ -448,13 +389,13 @@ class _MomentScreenState extends State<MomentScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
-        if (didPop || _celebrating || _step == _Step.polishing) return;
+        if (didPop || _celebrating) return;
+        if (_editing != null) return _commitEdit();
         if (_listening) {
           await _app.voice.cancel();
           setState(() => _listening = false);
           await _app.sounds.unhush();
         }
-        if (_step == _Step.read) return _backToTalking();
         if (await _confirmLeave() && context.mounted) Navigator.of(context).pop(false);
       },
       child: Scaffold(
@@ -463,7 +404,7 @@ class _MomentScreenState extends State<MomentScreen> {
             child: Column(
               children: [
                 _topBar(),
-                Expanded(child: _photo == null ? _choosePhoto() : _withDock()),
+                Expanded(child: _photo == null ? _choosePhoto() : _talk()),
               ],
             ),
           ),
@@ -483,9 +424,7 @@ class _MomentScreenState extends State<MomentScreen> {
             size: 56,
             onTap: () => Navigator.of(context).maybePop(),
           ),
-          Expanded(
-            child: Center(child: OutlinedTitle(_step == _Step.talk ? 'New moment' : 'Super Sentence', size: 30)),
-          ),
+          const Expanded(child: Center(child: OutlinedTitle('New moment', size: 30))),
           const SizedBox(width: 56),
         ],
       ),
@@ -523,21 +462,31 @@ class _MomentScreenState extends State<MomentScreen> {
     );
   }
 
-  /// The page scrolls under a floating dock with the mic in the middle.
-  Widget _withDock() {
-    final canTalk = _voiceReady == VoiceReady.ready && !_celebrating;
-    final Widget dock = switch (_step) {
-      _Step.talk => _fixingWord ? _wordActions(canTalk) : _talkDock(canTalk),
-      _Step.polishing => const SizedBox(height: 150),
-      _Step.read => _readDock(canTalk),
-    };
+  /// The page scrolls under a floating dock: the mic, or the editing tools
+  /// while a bubble is being fixed.
+  Widget _talk() {
+    final canTalk = _voiceReady == VoiceReady.ready && !_celebrating && !_preparing;
+    final keyboardUp = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Stack(
       children: [
         Positioned.fill(
           child: SingleChildScrollView(
             // Room at the bottom so nothing hides under the floating mic.
-            padding: const EdgeInsets.fromLTRB(24, 18, 24, 220),
-            child: _step == _Step.talk ? _talkPage() : _readPage(),
+            padding: EdgeInsets.fromLTRB(24, 18, 24, keyboardUp ? 120 : 220),
+            child: Column(
+              children: [
+                _photoCard(),
+                const SizedBox(height: 18),
+                SheruSays(_message, size: 84, listening: _listening, level: _level, happy: _celebrating),
+                if (!_listening && _editing == null && _bridged == null && !_celebrating) ...[
+                  const SizedBox(height: 10),
+                  _BridgeButtons(enabled: canTalk && !_busy, onTap: _bridge),
+                ],
+                if (_bridged != null) ...[const SizedBox(height: 10), _bridgeCard()],
+                const SizedBox(height: 12),
+                _wordBoard(),
+              ],
+            ),
           ),
         ),
         Positioned(
@@ -553,28 +502,28 @@ class _MomentScreenState extends State<MomentScreen> {
                 stops: const [0, 0.35, 1],
               ),
             ),
-            child: Padding(padding: const EdgeInsets.fromLTRB(16, 24, 16, 10), child: dock),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 10),
+              child: _editing != null ? _editTools() : _talkDock(canTalk),
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _photoCard(double heightFraction, {bool canChange = false}) {
+  Widget _photoCard() {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // The frame is 4:3 plus its white border, so limit its width to fit the height.
-        Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: (MediaQuery.sizeOf(context).height * heightFraction - 26) * 4 / 3 + 24),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Polaroid(image: FileImage(File(_photo!)), tilt: -0.03),
-            ),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.34),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Polaroid(image: FileImage(File(_photo!)), tilt: -0.03),
           ),
         ),
-        if (canChange)
+        if (!_listening && !_celebrating && _editing == null)
           Positioned(
             right: -6,
             bottom: -10,
@@ -585,32 +534,6 @@ class _MomentScreenState extends State<MomentScreen> {
               onTap: () => setState(() => _photo = null),
             ),
           ),
-      ],
-    );
-  }
-
-  Widget _sheru() => SheruSays(
-    _message,
-    size: 84,
-    listening: _listening,
-    level: _level,
-    happy: _celebrating || (_step == _Step.read && (_read?.stars ?? 0) == 3),
-  );
-
-  Widget _talkPage() {
-    final live = splitWords(_live);
-    return Column(
-      children: [
-        _photoCard(0.34, canChange: !_listening && !_celebrating),
-        const SizedBox(height: 18),
-        _sheru(),
-        if (_online && !_listening && !_thinking && _bridged == null && _selected == null) ...[
-          const SizedBox(height: 10),
-          _BridgeButton(onTap: () => _startTalking(_Mode.bridge)),
-        ],
-        if (_bridged != null) ...[const SizedBox(height: 10), _bridgeCard()],
-        const SizedBox(height: 12),
-        _wordBoard(live),
       ],
     );
   }
@@ -627,91 +550,44 @@ class _MomentScreenState extends State<MomentScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(b.english, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Gj.teal, height: 1.1)),
-                if (b.sentence.isNotEmpty)
-                  Text(b.sentence, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Gj.ink)),
-              ],
+            child: GestureDetector(
+              onTap: () => _app.speaker.say(b.word),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(b.from, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Gj.inkSoft)),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          b.word,
+                          style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: Gj.teal, height: 1.1),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.volume_up_rounded, color: Gj.teal),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-          BlobButton(icon: Icons.add_rounded, color: Gj.teal, size: 54, label: 'Add it', onTap: _addBridged),
+          BlobButton(
+            icon: Icons.close_rounded,
+            color: Gj.inkSoft,
+            size: 48,
+            label: 'No',
+            onTap: () => setState(() {
+              _bridged = null;
+              _sheruSays = null;
+            }),
+          ),
+          const SizedBox(width: 8),
+          BlobButton(icon: Icons.add_rounded, color: Gj.teal, size: 56, label: 'Add it', onTap: _addBridged),
         ],
       ),
     );
   }
-
-  Widget _readPage() {
-    final s = _super;
-    return Column(
-      children: [
-        _photoCard(0.22),
-        const SizedBox(height: 16),
-        _sheru(),
-        const SizedBox(height: 12),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
-          child: s == null
-              ? const Padding(
-                  padding: EdgeInsets.all(28),
-                  child: CircularProgressIndicator(color: Gj.saffron, strokeWidth: 6),
-                )
-              : Container(
-                  key: const ValueKey('super'),
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(18, 12, 12, 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(26),
-                    border: Border.all(color: Gj.marigold, width: 3),
-                    boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 10, offset: Offset(0, 4))],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.auto_awesome_rounded, color: Gj.saffron),
-                          const SizedBox(width: 6),
-                          const Expanded(
-                            child: Text(
-                              'Super Sentence',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Gj.saffron),
-                            ),
-                          ),
-                          if (!_listening)
-                            BlobButton(icon: Icons.edit_rounded, color: Gj.lilac, size: 44, onTap: _backToTalking),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      SentenceView(text: s.text, newWords: s.newWords, matched: _read?.matched, speaking: _speaking),
-                      if (_read != null || _bestStars > 0) ...[
-                        const SizedBox(height: 10),
-                        Center(child: StarRow(_read?.stars ?? _bestStars)),
-                      ],
-                    ],
-                  ),
-                ),
-        ),
-        if (s != null && s.newWords.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedTitle('New words', size: 22, color: Gj.saffron, stroke: 5),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [for (final w in s.newWords) NewWordChip(word: w, onTap: () => _sayWord(w))],
-          ),
-        ],
-      ],
-    );
-  }
-
-  bool get _fixingWord => _selected != null && !_listening && _replacing == null;
 
   /// Again · mic · Done.
   Widget _talkDock(bool canTalk) {
@@ -734,75 +610,31 @@ class _MomentScreenState extends State<MomentScreen> {
             color: Gj.leaf,
             label: 'Done',
             sound: Sfx.sparkle,
-            onTap: _words.isEmpty || _listening || _busy || _thinking ? null : _makeSuperSentence,
+            onTap: _words.isEmpty || _listening || _busy || _celebrating ? null : _save,
           ),
         ),
       ],
     );
   }
 
-  /// With a word picked: Pop it · mic to say it again · Keep.
-  Widget _wordActions(bool canTalk) {
+  /// While fixing a bubble: Pop it · Say it · OK, small enough to sit above
+  /// the keyboard.
+  Widget _editTools() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        _side(BlobButton(icon: Icons.bubble_chart_rounded, color: Gj.kumkum, label: 'Pop it', onTap: _popWord)),
-        MicButton(listening: false, level: 0, enabled: canTalk && !_busy, idleLabel: 'Say it again', onTap: _sayAgain),
-        _side(
-          BlobButton(
-            icon: Icons.close_rounded,
-            color: Gj.inkSoft,
-            label: 'Keep',
-            onTap: () => setState(() {
-              _selected = null;
-              _sheruSays = null;
-            }),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Hear it · mic to read it · Save.
-  Widget _readDock(bool canTalk) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        _side(
-          BlobButton(
-            icon: Icons.volume_up_rounded,
-            color: Gj.teal,
-            label: 'Hear it',
-            onTap: _listening || _celebrating || _speaking != null ? null : _hear,
-          ),
-        ),
-        MicButton(
-          listening: _listening,
-          level: _level,
-          enabled: canTalk && !_busy,
-          idleLabel: _read == null ? 'Read it to me' : 'Read it again',
-          onTap: _tapMic,
-        ),
-        _side(
-          BlobButton(
-            icon: Icons.check_rounded,
-            color: Gj.leaf,
-            label: 'Save',
-            sound: Sfx.sparkle,
-            onTap: _listening || _busy || _celebrating ? null : _save,
-          ),
-        ),
+        BlobButton(icon: Icons.bubble_chart_rounded, color: Gj.kumkum, size: 52, label: 'Pop it', onTap: _popEditing),
+        BlobButton(icon: Icons.mic_rounded, color: Gj.saffron, size: 52, label: 'Say it', onTap: _sayEditing),
+        BlobButton(icon: Icons.check_rounded, color: Gj.leaf, size: 52, label: 'OK', onTap: _commitEdit),
       ],
     );
   }
 
   Widget _side(Widget child) => Padding(padding: const EdgeInsets.only(bottom: 34), child: child);
 
-  Widget _wordBoard(List<String> live) {
+  Widget _wordBoard() {
+    final live = splitWords(_live);
     final empty = _words.isEmpty && live.isEmpty;
-    final showLive = _mode == _Mode.words || _mode == _Mode.replace;
     return AnimatedSize(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutBack,
@@ -826,22 +658,30 @@ class _MomentScreenState extends State<MomentScreen> {
             : Wrap(
                 spacing: 8,
                 runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   for (var i = 0; i < _words.length; i++)
-                    _PoppingIn(
-                      key: ValueKey('w$i${_words[i]}'),
-                      child: WordBubble(
-                        word: _replacing == i && _listening ? '...' : _words[i],
+                    if (_editing == i)
+                      _EditBubble(
+                        key: _editKey,
+                        controller: _editText,
+                        focusNode: _editFocus,
                         color: Gj.festive[i % Gj.festive.length],
-                        selected: _selected == i,
-                        onTap: () => _tapWord(i),
+                        onDone: _commitEdit,
+                      )
+                    else
+                      _PoppingIn(
+                        key: ValueKey('w$i${_words[i]}'),
+                        child: WordBubble(
+                          word: _replacing == i && _listening ? '...' : _words[i],
+                          color: Gj.festive[i % Gj.festive.length],
+                          onTap: () => _tapWord(i),
+                        ),
                       ),
-                    ),
-                  if (showLive && _replacing == null)
+                  if (_mode == _Mode.words)
                     for (var i = 0; i < live.length; i++)
                       WordBubble(word: live[i], color: Gj.festive[(_words.length + i) % Gj.festive.length], live: true),
-                  if (showLive && _replacing != null && live.isNotEmpty)
-                    WordBubble(word: live.join(' '), color: Gj.kumkum, live: true),
+                  if (_mode == _Mode.replace && live.isNotEmpty) WordBubble(word: live.join(' '), color: Gj.kumkum, live: true),
                   if (_mode == _Mode.bridge && live.isNotEmpty) WordBubble(word: live.join(' '), color: Gj.teal, live: true),
                 ],
               ),
@@ -850,39 +690,91 @@ class _MomentScreenState extends State<MomentScreen> {
   }
 }
 
-/// "I know it in Gujarati!": say a word in Gujarati or Hindi, get it in English.
-class _BridgeButton extends StatelessWidget {
-  const _BridgeButton({required this.onTap});
-  final VoidCallback onTap;
+/// A bubble turned into a little text box, with the keyboard up.
+class _EditBubble extends StatelessWidget {
+  const _EditBubble({
+    super.key,
+    required this.controller,
+    required this.focusNode,
+    required this.color,
+    required this.onDone,
+  });
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final Color color;
+  final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        App.of(context).sounds.play(Sfx.pop);
-        onTap();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: Gj.teal.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Gj.teal, width: 2.5),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.translate_rounded, color: Gj.teal),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                'I know it in Gujarati or Hindi!',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Gj.teal),
-              ),
-            ),
-          ],
+    return Container(
+      constraints: const BoxConstraints(minWidth: 90, maxWidth: 280),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: color, width: 3.5),
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 10)],
+      ),
+      child: IntrinsicWidth(
+        child: TextField(
+          controller: controller,
+          focusNode: focusNode,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => onDone(),
+          cursorColor: color,
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Gj.edge(color), height: 1.3),
+          decoration: const InputDecoration(isCollapsed: true, border: InputBorder.none, hintText: 'type...'),
         ),
       ),
+    );
+  }
+}
+
+/// "Say it in Bengali / Hindi": a word in either, back in English.
+class _BridgeButtons extends StatelessWidget {
+  const _BridgeButtons({required this.enabled, required this.onTap});
+  final bool enabled;
+  final void Function(HomeLanguage) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (final (i, lang) in HomeLanguage.values.indexed) ...[
+          if (i > 0) const SizedBox(width: 10),
+          Expanded(
+            child: GestureDetector(
+              onTap: enabled
+                  ? () {
+                      App.of(context).sounds.play(Sfx.pop);
+                      onTap(lang);
+                    }
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Gj.teal.withValues(alpha: enabled ? 0.12 : 0.05),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: enabled ? Gj.teal : Gj.inkSoft, width: 2.5),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      '${lang.native} → English',
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Gj.teal, height: 1.2),
+                    ),
+                    Text(
+                      'Say it in ${lang.name}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Gj.inkSoft, height: 1.1),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
