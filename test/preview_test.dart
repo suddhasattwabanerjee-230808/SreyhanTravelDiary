@@ -324,6 +324,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await shot(tester, '9h_grown_ups_charts');
 
+    // The music button: a song to pick, or none.
+    await pumpApp(tester);
+    tester.state<NavigatorState>(find.byType(Navigator)).popUntil((r) => r.isFirst);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.byIcon(Icons.music_note_rounded));
+    await tester.pump(const Duration(milliseconds: 600));
+    await shot(tester, '9i_music');
+
     await pumpApp(tester, screen: const WordJarScreen());
     await shot(tester, '10_word_jar');
 

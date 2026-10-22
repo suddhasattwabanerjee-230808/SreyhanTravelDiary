@@ -1,0 +1,85 @@
+name: Release
+
+# Publishes a version to the phone: push a tag named after pubspec.yaml's
+# version, e.g.
+#   git tag v0.6.0 && git push origin v0.6.0
+# Builds the APK, puts it on this repo's Releases page, and publishes it to
+# the public SreyhanTravelDiary-releases repo, where the app's updater looks
+# (lib/updates.dart). The CHANGELOG section becomes the release notes.
+# Pushes to main without a tag are only checked (flutter-ci.yml).
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the version and has notes
+        run: |
+          VERSION=$(python3 tool/build_number.py --version)
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match pubspec.yaml's version $VERSION (expected v$VERSION)."
+            exit 1
+          fi
+          python3 tool/release_notes.py "$VERSION" > notes.md
+          echo "VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$(python3 tool/build_number.py)" >> "$GITHUB_ENV"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+      # The NDK download from Google sometimes arrives cut short; retry.
+      - name: Install the Android NDK
+        run: |
+          for i in 1 2 3; do
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" < /dev/null > /dev/null && exit 0
+            echo "NDK download failed (try $i), retrying"; sleep 15
+          done
+          exit 1
+
+      - name: Build the APK
+        run: |
+          # No --split-debug-info: crash notes then name the functions involved.
+          flutter build apk --release --target-platform android-arm64 --build-number=$BUILD_NUMBER
+          cp build/app/outputs/flutter-apk/app-release.apk SreyhanDiary.apk
+          ls -l SreyhanDiary.apk
+
+      - name: Publish to this repo's Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" SreyhanDiary.apk \
+            --title "Sreyhan's Diary $VERSION_NAME" --notes-file notes.md --latest
+
+      # The app checks the public SreyhanTravelDiary-releases repo (this one is
+      # private). RELEASES_TOKEN is a token that can write to it.
+      - name: Publish the in-app update
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Set the RELEASES_TOKEN secret so releases reach the app."
+            exit 1
+          fi
+          python3 - > latest.json <<'PY'
+          import json, os
+          print(json.dumps({"versionCode": int(os.environ["BUILD_NUMBER"]),
+                            "versionName": os.environ["VERSION_NAME"],
+                            "notes": open("notes.md").read().strip()}))
+          PY
+          gh release create "$GITHUB_REF_NAME" SreyhanDiary.apk latest.json \
+            --repo suddhasattwabanerjee-230808/SreyhanTravelDiary-releases \
+            --title "Sreyhan's Diary $VERSION_NAME" --notes-file notes.md --latest

@@ -6,9 +6,9 @@ on:
   pull_request:
     branches: [main]
 
-# Publishing the APK to the Releases page needs write access.
+# Checks and builds every push; publishing is release.yml's job (a vX.Y.Z tag).
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -36,17 +36,16 @@ jobs:
           exit 1
 
       # The phone can't build APKs itself (the Android build tools are x86
-      # only), so this is where the installable APK comes from. A release
-      # build (ahead-of-time compiled, unused code and icons stripped, arm64
-      # only) is a fraction of a debug build's size. Every build gets its own
-      # number, so the app's updater can tell a newer one apart.
+      # only), so this checks that the app builds. A release build (ahead-of-
+      # time compiled, unused code and icons stripped, arm64 only) is a
+      # fraction of a debug build's size. The APK is kept as a download for
+      # two weeks, but nothing reaches the phone until a release (release.yml).
       - name: Build the APK
         run: |
-          echo "BUILD_NUMBER=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "VERSION_NAME=$(grep '^version:' pubspec.yaml | sed -E 's/version: *([^+]*).*/\1/')" >> "$GITHUB_ENV"
+          # The same number release.yml gives this version (see there).
+          BUILD_NUMBER=$(python3 tool/build_number.py)
           # No --split-debug-info: crash notes then name the functions involved.
-          flutter build apk --release --target-platform android-arm64 \
-            --build-number=$((100 + GITHUB_RUN_NUMBER))
+          flutter build apk --release --target-platform android-arm64 --build-number=$BUILD_NUMBER
           cp build/app/outputs/flutter-apk/app-release.apk SreyhanDiary.apk
           ls -l SreyhanDiary.apk
 
@@ -55,41 +54,3 @@ jobs:
           name: SreyhanDiary-${{ github.sha }}
           path: SreyhanDiary.apk
           retention-days: 14
-
-      # Every build on main replaces this repo's "latest" release, so this link
-      # always gets the newest APK:
-      # https://github.com/<owner>/SreyhanTravelDiary/releases/latest/download/SreyhanDiary.apk
-      - name: Publish to Releases
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release delete latest --cleanup-tag --yes || true
-          gh release create latest SreyhanDiary.apk \
-            --target "$GITHUB_SHA" \
-            --title "Sreyhan's Diary $VERSION_NAME ($BUILD_NUMBER)" \
-            --notes "Built from ${GITHUB_SHA::7}: $(git log -1 --format=%s)"
-
-      # The app checks the public SreyhanTravelDiary-releases repo for updates
-      # (lib/updates.dart): it holds only APKs and latest.json, since this repo
-      # is private. RELEASES_TOKEN is a token that can write to that repo; without
-      # it this step only warns.
-      - name: Publish the in-app update
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::Set the RELEASES_TOKEN secret to publish in-app updates."
-            exit 0
-          fi
-          python3 - > latest.json <<'PY'
-          import json, os, subprocess
-          notes = subprocess.run(["git", "log", "-1", "--format=%s"], capture_output=True, text=True).stdout.strip()
-          print(json.dumps({"versionCode": int(os.environ["BUILD_NUMBER"]),
-                            "versionName": os.environ["VERSION_NAME"], "notes": notes}))
-          PY
-          gh release create "v$VERSION_NAME-$BUILD_NUMBER" SreyhanDiary.apk latest.json \
-            --repo suddhasattwabanerjee-230808/SreyhanTravelDiary-releases \
-            --title "Sreyhan's Diary $VERSION_NAME ($BUILD_NUMBER)" \
-            --notes "$(git log -1 --format=%s)" --latest

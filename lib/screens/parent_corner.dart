@@ -1,15 +1,19 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../app_channel.dart';
 import '../app_scope.dart';
 import '../backup.dart';
 import '../models.dart';
 import '../places.dart';
+import '../sound_board.dart';
 import '../stats.dart';
 import '../theme.dart';
+import '../updates.dart';
 import 'how_to_screen.dart';
 import 'word_jar_screen.dart' show collectWords;
 
@@ -147,8 +151,8 @@ class _SumDialogState extends State<_SumDialog> {
   }
 }
 
-/// The grown-ups' corner: sound settings, how the child's English is
-/// growing, a backup of the whole diary, and deleting a day.
+/// The grown-ups' corner: music and sounds, updates, how the child's English
+/// is growing, a backup of the whole diary, and deleting a day.
 class ParentCorner extends StatefulWidget {
   const ParentCorner({super.key});
 
@@ -210,6 +214,20 @@ class _ParentCornerState extends State<ParentCorner> {
     if (mounted) setState(() => _busy = null);
   }
 
+  /// A song from the phone for the music, copied into the app (DiaryFiles.kt).
+  Future<void> _pickSong() async {
+    try {
+      final dir = '${(await getApplicationDocumentsDirectory()).path}/music';
+      final song = await const MethodChannel('sreyhan/files').invokeMapMethod<String, String>('pickSong', {'dir': dir});
+      if (song == null || !mounted) return;
+      await _app.sounds.setOwnSong(song['path']!, song['name']!);
+      _say('Now playing "${song['name']}".');
+    } catch (e, st) {
+      reportError('Picking a song: $e', st);
+      _say("That song couldn't be used: $e");
+    }
+  }
+
   Future<void> _deleteDay(DiaryDay d) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -248,7 +266,7 @@ class _ParentCornerState extends State<ParentCorner> {
                 ListView(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
                   children: [
-                    const _Section('Sounds'),
+                    const _Section('Music and sounds'),
                     _Card(
                       child: ListenableBuilder(
                         listenable: sounds,
@@ -256,10 +274,31 @@ class _ParentCornerState extends State<ParentCorner> {
                           children: [
                             SwitchListTile(
                               title: const Text('Music'),
-                              subtitle: const Text('The garba tune on the home screen'),
+                              subtitle: const Text('Plays on the home screen; the child can pick it with the music button'),
                               value: sounds.musicOn,
                               onChanged: sounds.setMusicOn,
                             ),
+                            RadioGroup<MusicTrack>(
+                              groupValue: sounds.musicOn ? sounds.track : null,
+                              onChanged: (t) => t == null ? null : sounds.setTrack(t),
+                              child: Column(
+                                children: [
+                                  for (final t in sounds.tracks)
+                                    RadioListTile<MusicTrack>(
+                                      value: t,
+                                      dense: true,
+                                      title: Text(t == MusicTrack.own ? 'My own song: ${sounds.ownSongName ?? ''}' : t.label),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.library_music_rounded, color: Gj.lilac),
+                              title: Text(sounds.ownSong == null ? 'Pick a song from this phone' : 'Pick a different song'),
+                              subtitle: const Text('Any music file you have, e.g. a soundtrack you bought. It stays on this phone.'),
+                              onTap: _pickSong,
+                            ),
+                            const Divider(height: 1),
                             SwitchListTile(
                               title: const Text('Sound effects'),
                               subtitle: const Text('Pops, chimes and the dhol'),
@@ -270,6 +309,8 @@ class _ParentCornerState extends State<ParentCorner> {
                         ),
                       ),
                     ),
+                    const _Section('Updates'),
+                    _Card(child: _UpdateTile(version: _version)),
                     const _Section('Progress'),
                     _Progress(days: days),
                     const _Section('Keep the diary safe'),
@@ -587,4 +628,58 @@ class _BarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BarPainter old) => old.bars != bars || old.picked != picked;
+}
+
+/// "Check for updates": asks GitHub now, then offers the new version, with
+/// the download's progress in place.
+class _UpdateTile extends StatelessWidget {
+  const _UpdateTile({required this.version});
+  final String? version;
+
+  @override
+  Widget build(BuildContext context) {
+    final updates = Updates.instance;
+    return ListenableBuilder(
+      listenable: updates,
+      builder: (context, _) {
+        final latest = updates.latest;
+        final progress = updates.progress;
+        final String title, subtitle;
+        VoidCallback? onTap = updates.check;
+        var icon = Icons.system_update_rounded;
+        if (progress != null) {
+          title = updates.installing ? 'Installing...' : 'Downloading the update...';
+          subtitle = '${(progress * 100).round()}%';
+          onTap = null;
+        } else if (updates.checking) {
+          title = 'Checking...';
+          subtitle = 'Asking GitHub for the newest version';
+          onTap = null;
+        } else if (latest != null) {
+          title = 'Install version ${latest.versionName}';
+          subtitle = updates.error != null ? "Couldn't update: ${updates.error}. Tap to try again." : 'Tap to download and install. The diary is kept.';
+          onTap = updates.install;
+          icon = Icons.download_rounded;
+        } else if (updates.lastCheckOk == false) {
+          title = 'Check for updates';
+          subtitle = "Couldn't reach GitHub. Is the internet on?";
+        } else if (updates.lastCheckOk == true) {
+          title = 'Check for updates';
+          subtitle = 'This is the newest version${version == null ? '' : ' ($version)'}.';
+          icon = Icons.verified_rounded;
+        } else {
+          title = 'Check for updates';
+          subtitle = version == null ? 'See if a new version is out' : 'This phone has $version';
+        }
+        return ListTile(
+          leading: progress != null
+              ? SizedBox.square(dimension: 24, child: CircularProgressIndicator(value: progress, strokeWidth: 3))
+              : Icon(icon, color: latest != null ? Gj.leaf : Gj.peacock),
+          title: Text(title),
+          subtitle: Text(subtitle),
+          onTap: onTap,
+        );
+      },
+    );
+  }
 }

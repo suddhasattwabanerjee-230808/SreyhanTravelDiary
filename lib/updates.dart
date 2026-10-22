@@ -223,6 +223,11 @@ class Updates extends ChangeNotifier {
   bool installing = false;
   String? error;
 
+  /// Whether the last check reached GitHub, and when: for the grown-ups'
+  /// "Check for updates" button.
+  bool? lastCheckOk;
+  DateTime? checkedAt;
+
   bool get available => latest != null;
 
   /// For previews: pretend [info] is waiting.
@@ -249,9 +254,12 @@ class Updates extends ChangeNotifier {
       final info = UpdateInfo.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
       final build = int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
       latest = info.versionCode > build ? info : null;
+      lastCheckOk = true;
     } catch (e) {
       debugPrint('update check failed: $e');
+      lastCheckOk = false;
     } finally {
+      checkedAt = DateTime.now();
       checking = false;
       notifyListeners();
     }

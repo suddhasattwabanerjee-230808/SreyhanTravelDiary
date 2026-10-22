@@ -138,8 +138,28 @@ final _pages = [
     ),
   ),
   _Page(
+    'Music',
+    'Tap the music button to pick a song: Garba, Block World or Obby Dash. Or tap No music for quiet.',
+    Gj.lilac,
+    () => const Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _Pretend(child: BlobButton(icon: Icons.music_note_rounded, color: Gj.lilac, size: 84, onTap: _nothing)),
+        SizedBox(width: 18),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.celebration_rounded, color: Gj.kumkum, size: 44),
+            Icon(Icons.view_in_ar_rounded, color: Gj.leaf, size: 44),
+            Icon(Icons.sports_score_rounded, color: Gj.peacock, size: 44),
+          ],
+        ),
+      ],
+    ),
+  ),
+  _Page(
     'For grown-ups',
-    'Grown-ups, hold the little lock for three seconds. You can turn sounds off, see progress, and save a backup.',
+    'Grown-ups, hold the little lock for three seconds. You can choose music, check for updates, see progress, and save a backup.',
     Gj.inkSoft,
     () => const _Pretend(
       child: Column(

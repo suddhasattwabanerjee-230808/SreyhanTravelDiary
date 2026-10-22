@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipEntry
@@ -49,6 +50,25 @@ object DiaryFiles {
                 entry = zip.nextEntry
             }
         }
+    }
+
+    /**
+     * Copies a picked song into [dir] (replacing any earlier one) and returns
+     * its path and the name it had, for the grown-ups' corner to show.
+     */
+    fun copySong(context: Context, uri: Uri, dir: File): Map<String, String> {
+        val resolver = context.contentResolver
+        val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        } ?: "My song"
+        val ext = name.substringAfterLast('.', "").lowercase().takeIf { it.length in 2..4 } ?: "mp3"
+        dir.deleteRecursively()
+        dir.mkdirs()
+        // A new file name each time, so the player never reuses the old song.
+        val out = File(dir, "song-${System.currentTimeMillis()}.$ext")
+        val input = resolver.openInputStream(uri) ?: throw IllegalStateException("can't open the song")
+        input.use { src -> out.outputStream().use { src.copyTo(it) } }
+        return mapOf("path" to out.path, "name" to name.substringBeforeLast('.'))
     }
 
     /** Puts a PNG into Pictures/Sreyhan Diary, where the gallery shows it. */

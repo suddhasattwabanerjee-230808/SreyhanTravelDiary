@@ -10,6 +10,7 @@ import '../sound_board.dart';
 import '../theme.dart';
 import '../widgets/playful.dart';
 import '../widgets/sheru.dart';
+import '../widgets/music_sheet.dart';
 import '../widgets/sky.dart';
 import '../widgets/update_card.dart';
 import 'day_screen.dart';
@@ -301,7 +302,7 @@ class _MusicToggle extends StatelessWidget {
         icon: sounds.musicOn ? Icons.music_note_rounded : Icons.music_off_rounded,
         color: sounds.musicOn ? Gj.lilac : Gj.inkSoft,
         size: 54,
-        onTap: () => sounds.setMusicOn(!sounds.musicOn),
+        onTap: () => showMusicSheet(context),
       ),
     );
   }

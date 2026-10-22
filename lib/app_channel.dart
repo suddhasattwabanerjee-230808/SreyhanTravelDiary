@@ -44,8 +44,12 @@ class Prefs {
       });
 
   bool? getBool(String key) => _values[key] as bool?;
+  String? getString(String key) => _values[key] as String?;
 
-  Future<void> setBool(String key, bool value) async {
+  Future<void> setBool(String key, bool value) => _set(key, value);
+  Future<void> setString(String key, String? value) => _set(key, value);
+
+  Future<void> _set(String key, Object? value) async {
     _values[key] = value;
     if (_memory) return;
     await AppChannel.setPref(key, value).catchError((Object e, StackTrace st) {

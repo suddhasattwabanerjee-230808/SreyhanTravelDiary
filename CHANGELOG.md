@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0] - 2026-10-22
+
+### Added
+- Sheru is the app icon now, on a sky-blue background, in place of the
+  Flutter logo.
+- Pick the music: the music button opens a choice of Garba, Block World (a
+  calm piano tune in the mood of block-building games), Obby Dash (a bouncy
+  chiptune in the mood of obstacle-course games), or no music. Both new
+  tunes are our own, made for the diary.
+- My own song: in the grown-ups' corner, pick any music file on the phone
+  to play instead. It's copied into the app and never leaves the phone.
+- Check for updates: a button in the grown-ups' corner asks for a new
+  version straight away, then downloads and installs it in place.
+- How to Use has a Music page, and the grown-ups page lists the new
+  settings.
+
+### Changed
+- Updates come only from chosen releases now, not from every change, so the
+  phone only gets finished versions. The update notes are this changelog.
+
 ## [0.5.1] - 2026-10-22
 
 ### Fixed

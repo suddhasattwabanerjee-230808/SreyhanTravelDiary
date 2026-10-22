@@ -24,9 +24,22 @@ class MainActivity : FlutterActivity() {
     // which left 0.4.0 on a black screen (ShotDrop hit the same thing).
     private val prefs by lazy { getSharedPreferences("diary.settings", Context.MODE_PRIVATE) }
 
-    // Answers waiting on the location question and the backup file picker.
+    // Answers waiting on the location question and the file pickers.
     private var onLocationAnswer: ((Boolean) -> Unit)? = null
-    private var onBackupPicked: ((android.net.Uri?) -> Unit)? = null
+    private val onPicked = HashMap<Int, (android.net.Uri?) -> Unit>()
+
+    /** Lets the grown-up pick a file; [then] gets null if they backed out. */
+    private fun pickFile(request: Int, types: Array<String>, then: (android.net.Uri?) -> Unit) {
+        onPicked.remove(request)?.invoke(null)
+        onPicked[request] = then
+        val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = if (types.size == 1) types[0] else "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, types)
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(pick, request)
+    }
 
     private fun withLocation(then: (Boolean) -> Unit) {
         val perm = Manifest.permission.ACCESS_COARSE_LOCATION
@@ -45,9 +58,7 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != BACKUP_REQUEST) return
-        onBackupPicked?.invoke(if (resultCode == Activity.RESULT_OK) data?.data else null)
-        onBackupPicked = null
+        onPicked.remove(requestCode)?.invoke(if (resultCode == Activity.RESULT_OK) data?.data else null)
     }
 
     /** Slow file work off the main thread; the answer back on it. */
@@ -125,17 +136,20 @@ class MainActivity : FlutterActivity() {
                 // Lets the grown-up pick a backup .zip, then unpacks it; null if they backed out.
                 "openBackup" -> {
                     val into = File(call.argument<String>("into")!!)
-                    onBackupPicked = { uri ->
+                    val zips = arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
+                    pickFile(BACKUP_REQUEST, zips) { uri ->
                         if (uri == null) result.success(null)
                         else inBackground(result) { DiaryFiles.unzip(this, uri, into); into.path }
                     }
-                    val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "*/*"
-                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                }
+                // A song from the phone for the music: copied into [dir], so it
+                // keeps playing even if the original moves.
+                "pickSong" -> {
+                    val dir = File(call.argument<String>("dir")!!)
+                    pickFile(SONG_REQUEST, arrayOf("audio/*")) { uri ->
+                        if (uri == null) result.success(null)
+                        else inBackground(result) { DiaryFiles.copySong(this, uri, dir) }
                     }
-                    @Suppress("DEPRECATION")
-                    startActivityForResult(pick, BACKUP_REQUEST)
                 }
                 "saveToGallery" -> inBackground(result) {
                     DiaryFiles.saveToGallery(this, call.argument<String>("path")!!, call.argument<String>("name")!!)
@@ -178,5 +192,6 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val LOCATION_REQUEST = 41
         private const val BACKUP_REQUEST = 42
+        private const val SONG_REQUEST = 43
     }
 }
