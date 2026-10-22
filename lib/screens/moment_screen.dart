@@ -246,9 +246,12 @@ class _MomentScreenState extends State<MomentScreen> {
     });
     if (said.isEmpty) {
       _app.sounds.play(Sfx.oops);
+      final noLanguage = _mode == _Mode.bridge && _app.voice.languageMissing;
       setState(() {
         _replacing = null;
-        _sheruSays = "I didn't hear anything. Tap the mic and talk!";
+        _sheruSays = noLanguage
+            ? "This phone can't hear ${_bridgeLang!.name} yet. A grown-up can add it in the phone's voice typing settings."
+            : "I didn't hear anything. Tap the mic and talk!";
       });
       return;
     }

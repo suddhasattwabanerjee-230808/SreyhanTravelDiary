@@ -70,6 +70,9 @@ class FakeVoice implements VoiceInput {
 
   @override
   Future<void> cancel() async => _on = false;
+
+  @override
+  bool get languageMissing => false;
 }
 
 class FakeLabeler implements PhotoLabeler {

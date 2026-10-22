@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.1] - 2026-10-22
+
+### Fixed
+- Saying a word in Bengali or Hindi: the app no longer gives up when the
+  phone's speech recogniser leaves the language off its list (it often
+  lists only some of what it can hear). It now asks for the language anyway.
+- If the phone really can't hear that language, Sheru says so and how a
+  grown-up can add it (the phone's voice typing settings), instead of "I
+  didn't hear anything". The note in Download lists the languages the phone
+  does offer.
+
 ## [0.6.0] - 2026-10-22
 
 ### Added

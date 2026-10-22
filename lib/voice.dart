@@ -21,8 +21,9 @@ abstract class VoiceInput {
   /// [onLevel] gets loudness from 0 to 1. With [oneShot] listening ends by
   /// itself after the first thing said (for fixing one word). [onEnded] is
   /// called when listening ends by itself, so the screen can wrap up.
-  /// [languages] picks the first of these the phone can hear (e.g. `gu_IN`,
-  /// `hi_IN`) instead of English; start returns false if it has none.
+  /// [languages] picks the first of these the phone can hear (e.g. `bn_IN`,
+  /// `hi_IN`) instead of English. If the phone doesn't list any of them it
+  /// tries the first anyway; [languageMissing] then says if that failed.
   Future<bool> start({
     required void Function(String text) onText,
     void Function(double level)? onLevel,
@@ -34,6 +35,10 @@ abstract class VoiceInput {
   /// Stops and returns everything that was said.
   Future<String> stop();
   Future<void> cancel();
+
+  /// True when the last listen ended because the recogniser can't do the
+  /// language asked for.
+  bool get languageMissing;
 }
 
 /// Android's speech recogniser. The recogniser stops by itself after a pause;
@@ -49,6 +54,9 @@ class DeviceVoiceInput implements VoiceInput {
   VoiceReady? _ready;
 
   bool _active = false;
+
+  @override
+  bool languageMissing = false;
 
   /// Results count only from start until stop has returned the text; the
   /// recogniser can deliver late ones after that.
@@ -113,9 +121,16 @@ class DeviceVoiceInput implements VoiceInput {
   }) async {
     if (_active) return true;
     if (await init() != VoiceReady.ready) return false;
+    languageMissing = false;
     if (languages != null) {
+      // Google's recogniser often lists only some of what it can hear (on
+      // Android 16 Bengali was missing), so ask for the language anyway; a
+      // "not supported" error then says it really can't.
       _localeId = _pickLocale(languages);
-      if (_localeId == null) return false;
+      if (_localeId == null) {
+        _localeId = languages.first;
+        reportError('Speech: ${languages.first} not in the phone\'s list, trying anyway. Listed: ${_locales.join(', ')}', null);
+      }
     } else {
       _localeId = _english;
     }
@@ -173,10 +188,20 @@ class DeviceVoiceInput implements VoiceInput {
     }
   }
 
+  static const _languageErrors = {'error_language_not_supported', 'error_language_unavailable'};
+
   void _onError(SpeechRecognitionError e) {
     debugPrint('speech error: ${e.errorMsg} permanent=${e.permanent}');
     _completeFinished();
-    if (_active && e.errorMsg != 'error_permission') _restartSoon();
+    if (!_active) return;
+    if (_languageErrors.contains(e.errorMsg)) {
+      // Restarting can't help: end, and let the screen say why.
+      languageMissing = true;
+      reportError('Speech: $_localeId: ${e.errorMsg}', null);
+      _endedByItself();
+      return;
+    }
+    if (e.errorMsg != 'error_permission') _restartSoon();
   }
 
   void _endedByItself() {
