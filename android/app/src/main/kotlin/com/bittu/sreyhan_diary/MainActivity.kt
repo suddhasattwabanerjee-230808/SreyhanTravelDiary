@@ -50,6 +50,20 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        MethodChannel(messenger, "sreyhan/share").setMethodCallHandler { call, result ->
+            val path = call.argument<String>("path")
+            if (call.method != "share" || path == null) {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            try {
+                ShareFile.share(this, path, call.argument<String>("mime") ?: "*/*", call.argument<String>("title") ?: "Share")
+                result.success(null)
+            } catch (e: Exception) {
+                result.error("share_failed", e.message ?: e.toString(), null)
+            }
+        }
+
         MethodChannel(messenger, "sreyhan/translate").setMethodCallHandler { call, result ->
             WordTranslation.handle(this, call, result)
         }

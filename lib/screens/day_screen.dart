@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets/playful.dart';
 import '../widgets/sentence_view.dart';
 import '../widgets/sheru.dart';
+import 'export_screen.dart';
 import 'moment_screen.dart';
 
 /// One diary day as a scrapbook: each moment a taped-in photo with the
@@ -87,7 +88,17 @@ class _DayScreenState extends State<DayScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 56),
+                    // Share my day: a storybook, postcard or comic.
+                    BlobButton(
+                      icon: Icons.share_rounded,
+                      color: Gj.leaf,
+                      size: 56,
+                      onTap: day == null || day.isEmpty
+                          ? null
+                          : () => Navigator.of(
+                              context,
+                            ).push(MaterialPageRoute<void>(builder: (_) => ExportScreen(date: widget.date))),
+                    ),
                   ],
                 ),
               ),

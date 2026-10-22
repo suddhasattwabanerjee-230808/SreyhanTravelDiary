@@ -20,6 +20,7 @@ import 'package:sreyhan_diary/games/which_photo_game.dart';
 import 'package:sreyhan_diary/main.dart';
 import 'package:sreyhan_diary/models.dart';
 import 'package:sreyhan_diary/screens/day_screen.dart';
+import 'package:sreyhan_diary/screens/export_screen.dart';
 import 'package:sreyhan_diary/screens/how_to_screen.dart';
 import 'package:sreyhan_diary/screens/moment_screen.dart';
 import 'package:sreyhan_diary/screens/word_jar_screen.dart';
@@ -280,6 +281,18 @@ void main() {
 
     await pumpApp(tester, screen: DayScreen(date: dateKey(now)));
     await shot(tester, '9_day');
+
+    await pumpApp(tester, screen: ExportScreen(date: dateKey(now)));
+    await shot(tester, '9b_share_my_day');
+    await tester.tap(find.text('Picture postcard'));
+    await tester.pump(const Duration(milliseconds: 600));
+    await shot(tester, '9c_postcard');
+    // The app draws its own back buttons, so press the phone's back instead.
+    await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.text('Comic strip'));
+    await tester.pump(const Duration(milliseconds: 600));
+    await shot(tester, '9d_comic');
 
     await pumpApp(tester, screen: const WordJarScreen());
     await shot(tester, '10_word_jar');

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Storybooks, postcards and comics handed to other apps (ShareFile.kt). -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

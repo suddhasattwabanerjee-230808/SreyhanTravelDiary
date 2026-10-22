@@ -37,6 +37,16 @@
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="ica" />
+        <!-- Sharing a storybook, postcard or comic with another app (ShareFile.kt). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_paths" />
+        </provider>
         <!-- In-app updates: the install result, and reopening on the new version. -->
         <receiver
             android:name=".UpdateStatusReceiver"
