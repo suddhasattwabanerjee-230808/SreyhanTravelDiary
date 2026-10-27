@@ -23,6 +23,7 @@ class DiaryStore extends ChangeNotifier {
 
   Directory get _days => Directory('${root.path}/days');
   Directory get _media => Directory('${root.path}/media');
+  File get _deletedFile => File('${root.path}/sync/deleted.json');
 
   File file(String relative) => File('${root.path}/$relative');
 
@@ -93,6 +94,7 @@ class DiaryStore extends ChangeNotifier {
   /// A whole day, with its photos (grown-ups' corner).
   Future<void> deleteDay(String date) async {
     final d = await day(date);
+    await _rememberDeleted(d.moments);
     final f = File('${_days.path}/$date.json');
     if (await f.exists()) await f.delete();
     _cache.remove(date);
@@ -106,10 +108,51 @@ class DiaryStore extends ChangeNotifier {
   Future<void> deleteMoment(String date, String id) async {
     final d = await day(date);
     final gone = d.moments.where((m) => m.id == id).toList();
+    await _rememberDeleted(gone);
     await saveDay(d.copyWith(moments: d.moments.where((m) => m.id != id).toList()));
     for (final m in gone) {
       final f = file(m.photo);
       if (await f.exists()) await f.delete();
     }
+  }
+
+  /// IDs removed locally are retained so cloud sync can carry deletions to
+  /// the other devices instead of restoring an old copy of the moment.
+  Future<Set<String>> deletedMomentIds() async {
+    if (!await _deletedFile.exists()) return {};
+    try {
+      return (jsonDecode(await _deletedFile.readAsString()) as List).cast<String>().toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> rememberRemoteDeletion(String date, String id) async {
+    final current = await day(date);
+    final removed = current.moments.where((m) => m.id == id).toList();
+    await _rememberDeleted(removed.isEmpty ? [Moment(id: id, createdAt: DateTime.parse(date), photo: '', text: '')] : removed);
+    if (removed.isNotEmpty) {
+      await saveDay(current.copyWith(moments: current.moments.where((m) => m.id != id).toList()));
+      for (final m in removed) {
+        final photo = file(m.photo);
+        if (await photo.exists()) await photo.delete();
+      }
+    }
+  }
+
+  Future<void> clearDeletedMomentId(String id) async {
+    final ids = await deletedMomentIds()..remove(id);
+    await _writeDeleted(ids);
+  }
+
+  Future<void> _rememberDeleted(List<Moment> moments) async {
+    if (moments.isEmpty) return;
+    final ids = await deletedMomentIds()..addAll(moments.map((m) => m.id));
+    await _writeDeleted(ids);
+  }
+
+  Future<void> _writeDeleted(Set<String> ids) async {
+    await _deletedFile.parent.create(recursive: true);
+    await _deletedFile.writeAsString(jsonEncode(ids.toList()..sort()), flush: true);
   }
 }

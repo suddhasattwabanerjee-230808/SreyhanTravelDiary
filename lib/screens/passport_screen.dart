@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
+import '../diary_store.dart';
 import '../places.dart';
 import '../sound_board.dart';
 import '../theme.dart';
@@ -24,13 +25,19 @@ class PassportScreen extends StatefulWidget {
 class _PassportScreenState extends State<PassportScreen> {
   Set<String>? _stamps;
   Place? _picked;
+  DiaryStore? _store;
 
   App get _app => App.of(context);
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_stamps == null) _load();
+    final store = _app.store;
+    if (store != _store) {
+      _store?.removeListener(_load);
+      _store = store..addListener(_load);
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -38,13 +45,22 @@ class _PassportScreenState extends State<PassportScreen> {
     // Newest first, so the latest place is the one shown to start with.
     final visited = [
       for (final d in days)
-        for (final m in d.moments.reversed) ?m.place,
+        for (final m in d.moments.reversed) ...[
+          ?m.place,
+          ...placesMentioned(m.text).map((p) => p.id),
+        ],
     ];
     if (!mounted) return;
     setState(() {
       _stamps = passportStamps(visited);
-      _picked = placeById(visited.firstOrNull);
+      _picked ??= placeById(visited.firstOrNull);
     });
+  }
+
+  @override
+  void dispose() {
+    _store?.removeListener(_load);
+    super.dispose();
   }
 
   @override

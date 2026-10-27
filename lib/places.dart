@@ -201,6 +201,17 @@ final _byId = {for (final p in [...districts, ...landmarks, ...cities]) p.id: p}
 
 Place? placeById(String? id) => id == null ? null : _byId[id];
 
+/// Places named in a diary entry. This lets the passport recognize an
+/// explicitly written destination even when an imported photo has no GPS
+/// tags and the phone could not provide a location when it was saved.
+List<Place> placesMentioned(String text) => [
+  for (final place in [...landmarks, ...cities, ...districts])
+    if (RegExp(
+      '(?<![a-z0-9])${RegExp.escape(place.name.toLowerCase())}(?![a-z0-9])',
+    ).hasMatch(text.toLowerCase()))
+      place,
+];
+
 /// Gujarat's outline as (lat, lng), drawn on the passport map and used to
 /// tell whether a photo was taken in Gujarat. Rough, like a cartoon map.
 const gujaratOutline = <(double, double)>[

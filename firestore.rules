@@ -1,0 +1,14 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // One private diary per Firebase account.
+    match /diaries/{uid}/moments/{momentId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.id == momentId;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

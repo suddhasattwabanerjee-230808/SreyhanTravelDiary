@@ -4,6 +4,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Firebase reads project configuration from google-services.json after the
+// Android app has been registered in the Firebase project.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.bittu.sreyhan_diary"
     compileSdk = flutter.compileSdkVersion

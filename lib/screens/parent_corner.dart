@@ -14,6 +14,7 @@ import '../sound_board.dart';
 import '../stats.dart';
 import '../theme.dart';
 import '../updates.dart';
+import 'cloud_sync_screen.dart';
 import 'how_to_screen.dart';
 import 'word_jar_screen.dart' show collectWords;
 
@@ -313,6 +314,15 @@ class _ParentCornerState extends State<ParentCorner> {
                     _Card(child: _UpdateTile(version: _version)),
                     const _Section('Progress'),
                     _Progress(days: days),
+                    const _Section('Sync across phones'),
+                    _Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.cloud_sync_rounded, color: Gj.peacock),
+                        title: const Text('Set up diary sync'),
+                        subtitle: const Text('Choose entries from this phone once, then keep all three phones up to date.'),
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CloudSyncScreen())),
+                      ),
+                    ),
                     const _Section('Keep the diary safe'),
                     _Card(
                       child: Column(

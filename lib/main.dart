@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'app_channel.dart';
 import 'app_scope.dart';
+import 'cloud_sync.dart';
 import 'diary_store.dart';
 import 'place_finder.dart';
 import 'screens/home_screen.dart';
@@ -50,9 +52,12 @@ Future<void> main() async {
       () => DiaryStore(Directory('/data/user/0/com.bittu.sreyhan_diary/app_flutter/diary')),
     );
     final loading = Prefs.load();
+    final cloud = _initFirebase();
     await orientation;
     final store = await opening;
     final prefs = await loading;
+    await cloud;
+    await CloudDiarySync.instance.attach(store);
     runApp(
       DiaryApp(
         store: store,
@@ -81,6 +86,16 @@ Future<String?> pickPhotoFromDevice({required bool camera}) async {
     imageQuality: 82,
   );
   return x?.path;
+}
+
+/// Cloud sync is optional until the Android app is registered in Firebase.
+/// The offline diary still opens normally when the config file is absent.
+Future<void> _initFirebase() async {
+  try {
+    if (Firebase.apps.isEmpty) await Firebase.initializeApp().timeout(const Duration(seconds: 5));
+  } catch (e, st) {
+    reportError('Firebase setup: $e', st);
+  }
 }
 
 class DiaryApp extends StatefulWidget {
@@ -145,6 +160,7 @@ class _DiaryAppState extends State<DiaryApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       widget.sounds.startMusic();
       widget.onResumed?.call();
+      unawaited(CloudDiarySync.instance.syncNow());
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
       widget.sounds.stopMusic();
     }
