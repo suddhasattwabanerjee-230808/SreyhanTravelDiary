@@ -58,12 +58,15 @@ Future<void> main() async {
     final prefs = await loading;
     await cloud;
     await CloudDiarySync.instance.attach(store);
+    // Get the recogniser ready now, so the first tap on the mic is instant.
+    final voice = DeviceVoiceInput();
+    unawaited(voice.init());
     runApp(
       DiaryApp(
         store: store,
         sounds: SoundBoard(prefs),
         prefs: prefs,
-        voice: DeviceVoiceInput(),
+        voice: voice,
         pickPhoto: pickPhotoFromDevice,
         labeler: DeviceLabeler(),
         translator: DeviceTranslator(),

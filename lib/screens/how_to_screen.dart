@@ -107,7 +107,7 @@ final _pages = [
   ),
   _Page(
     'My Passport',
-    'Every new place you take a photo gets a stamp! Tap Map to see your stamps, and tap a stamp for a fun fact. The places you write about in your words get the stamps.',
+    'Every new place you take a photo gets a stamp! Tap Map to see your stamps, and tap a stamp for a fun fact. A stamp comes from where the photo was taken, or from a place you say in your words.',
     Gj.teal,
     () => const _Stamps(),
   ),

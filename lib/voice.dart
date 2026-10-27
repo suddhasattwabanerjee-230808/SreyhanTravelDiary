@@ -55,6 +55,9 @@ class DeviceVoiceInput implements VoiceInput {
 
   bool _active = false;
 
+  /// When listening began, to see how long the first words take.
+  DateTime? _heardFirst;
+
   @override
   bool languageMissing = false;
 
@@ -77,6 +80,7 @@ class DeviceVoiceInput implements VoiceInput {
   @override
   Future<VoiceReady> init() async {
     if (_ready == VoiceReady.ready) return _ready!;
+    final began = DateTime.now();
     try {
       // Never wait forever on a plugin: a hang here would freeze the mic.
       final ok = await _stt.initialize(onStatus: _onStatus, onError: _onError).timeout(const Duration(seconds: 10));
@@ -86,6 +90,8 @@ class DeviceVoiceInput implements VoiceInput {
       }
       _locales = (await _stt.locales().timeout(const Duration(seconds: 5))).map((l) => l.localeId).toList();
       _english = _pickLocale(const ['en_in', 'en_gb', 'en_us']) ?? _pickLocale(const [], anyEnglish: true);
+      final took = DateTime.now().difference(began).inMilliseconds;
+      if (took > 2000) reportError('Speech: the recogniser took ${took ~/ 1000}s to get ready', null);
       return _ready = VoiceReady.ready;
     } catch (e, st) {
       reportError('Speech recogniser: $e', st);
@@ -135,6 +141,7 @@ class DeviceVoiceInput implements VoiceInput {
       _localeId = _english;
     }
     _words.clear();
+    _heardFirst = DateTime.now();
     _accepting = true;
     _onText = onText;
     _onLevel = onLevel;
@@ -167,6 +174,12 @@ class DeviceVoiceInput implements VoiceInput {
 
   void _onResult(SpeechRecognitionResult r) {
     if (!_accepting) return;
+    final began = _heardFirst;
+    if (began != null && r.recognizedWords.isNotEmpty) {
+      _heardFirst = null;
+      final took = DateTime.now().difference(began).inMilliseconds;
+      if (took > 3500) reportError('Speech: the first words took ${took ~/ 1000}s to appear', null);
+    }
     if (_words.add(r.recognizedWords, isFinal: r.finalResult)) _completeFinished();
     _onText?.call(_text);
   }
@@ -192,6 +205,10 @@ class DeviceVoiceInput implements VoiceInput {
 
   void _onError(SpeechRecognitionError e) {
     debugPrint('speech error: ${e.errorMsg} permanent=${e.permanent}');
+    // Quiet moments are normal; anything else goes in the crash note.
+    if (e.errorMsg != 'error_no_match' && e.errorMsg != 'error_speech_timeout') {
+      reportError('Speech error: ${e.errorMsg} (permanent: ${e.permanent})', null);
+    }
     _completeFinished();
     if (!_active) return;
     if (_languageErrors.contains(e.errorMsg)) {

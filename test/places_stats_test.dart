@@ -63,6 +63,27 @@ void main() {
       expect(passportStamps(['gir', 'surat', 'kolkata']), {'gir', 'junagadh', 'surat', 'kolkata'});
     });
 
+    test('a close mention of a place counts', () {
+      Set<String> ids(String t) => placesMentioned(t).map((p) => p.id).toSet();
+      // "Modhera Temple" is "Modhera Sun Temple"; so is just "Modhera".
+      expect(ids('We went to Modhera Temple'), contains('modhera'));
+      expect(ids('i saw modhera'), contains('modhera'));
+      expect(ids('the sun temple of Modera'), contains('modhera'));
+      expect(ids('Sabarmati river and the ashram'), contains('sabarmati_ashram'));
+      expect(ids('the Gir forest lions'), contains('gir'));
+      expect(ids('we saw the statue of unity'), contains('statue_of_unity'));
+      expect(ids('a temple on a hill'), isEmpty);
+      expect(ids('I ate sugar'), isEmpty);
+    });
+
+    test('stamps come from GPS or from the words, either one', () {
+      final byGps = moment('a', 'a happy day', place: 'dwarka');
+      final byWords = moment('b', 'we went to Modhera Temple');
+      final both = stampsFromEntries([byGps, byWords]);
+      expect(both, containsAll(['dwarka', 'modhera']));
+      expect(stampsFromEntries([moment('c', 'at home')]), isEmpty);
+    });
+
     test('distances are about right', () {
       // Ahmedabad to Surat is about 210 km as the crow flies.
       final a = placeById('ahmedabad')!, s = placeById('surat')!;

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.4] - 2026-10-27
+
+### Changed
+- Passport stamps come from two things together: where the photo was taken
+  (GPS) and the places named in the child's words. Either one is enough.
+- A close mention counts as a match. "Modhera Temple" stamps Modhera Sun
+  Temple, "Gir" stamps Gir Forest, and a slipped letter ("Modera") is fine.
+  Words like temple, forest, fort and "Sun" are not needed to match.
+
+### Fixed
+- The microphone is made ready when the app opens, so the first tap on it
+  starts listening straight away.
+- Speech problems (errors, a slow start, slow first words) are now written to
+  the crash note in Download, so a voice problem can be traced.
+
 ## [0.7.3] - 2026-10-27
 
 ### Fixed

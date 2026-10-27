@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'models.dart';
 import 'theme.dart';
 
 /// What a place is on the passport map.
@@ -201,21 +202,62 @@ final _byId = {for (final p in [...districts, ...landmarks, ...cities]) p.id: p}
 
 Place? placeById(String? id) => id == null ? null : _byId[id];
 
-/// Places named in a diary entry. This lets the passport recognize an
-/// explicitly written destination even when an imported photo has no GPS
-/// tags and the phone could not provide a location when it was saved.
-List<Place> placesMentioned(String text) => [
-  for (final place in [...landmarks, ...cities, ...districts])
-    if (RegExp(
-      '(?<![a-z0-9])${RegExp.escape(place.name.toLowerCase())}(?![a-z0-9])',
-    ).hasMatch(text.toLowerCase()))
-      place,
-];
+/// Words that say what kind of place it is rather than which one, so
+/// "Modhera Temple" still means "Modhera Sun Temple".
+const _kindWords = {
+  'the', 'of', 'ki', 'ka', 'ke', 'in', 'at', 'to', 'sun', 'temple', 'mandir', 'forest', 'national', 'marine', 'park',
+  'step', 'well', 'stepwell', 'ashram', 'fort', 'beach', 'city', 'lake',
+};
 
-/// Every stamp in the passport, from the places the child wrote about in his
-/// entries. The text decides, not the photo's GPS, which can be inaccurate.
-Set<String> stampsFromEntries(Iterable<String> texts) => passportStamps({
-  for (final t in texts) ...placesMentioned(t).map((p) => p.id),
+List<String> _words(String s) => s.toLowerCase().split(RegExp(r'[^a-z0-9]+')).where((w) => w.isNotEmpty).toList();
+
+int _editDistance(String a, String b) {
+  var prev = List<int>.generate(b.length + 1, (i) => i);
+  for (var i = 1; i <= a.length; i++) {
+    final cur = [i, ...List.filled(b.length, 0)];
+    for (var j = 1; j <= b.length; j++) {
+      cur[j] = min(min(cur[j - 1], prev[j]) + 1, prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/// Same word, allowing a slip of a letter or two in longer words (speech
+/// recognition and spelling: "Modera", "Dwarka").
+bool _sameWord(String a, String b) {
+  if (a == b) return true;
+  if (a.length < 5 || b.length < 5) return false;
+  return _editDistance(a, b) <= (min(a.length, b.length) >= 8 ? 2 : 1);
+}
+
+/// Places named in a diary entry. A close match counts: every word that
+/// tells the place apart has to be there, give or take a letter, but the
+/// kind-of-place words (temple, forest, "Sun") and their order don't matter.
+/// Imported photos often have no GPS, so the words are a second way to know
+/// where the child went.
+List<Place> placesMentioned(String text) {
+  final said = _words(text);
+  if (said.isEmpty) return const [];
+  return [
+    for (final place in [...landmarks, ...cities, ...districts])
+      if (_mentions(said, place)) place,
+  ];
+}
+
+bool _mentions(List<String> said, Place place) {
+  final all = _words(place.name);
+  final key = all.where((w) => !_kindWords.contains(w)).toList();
+  // A name made only of kind words ("Marine ..."): the whole name must be said.
+  final need = key.isEmpty ? all : key;
+  return need.every((w) => said.any((s) => _sameWord(s, w)));
+}
+
+/// Every stamp in the passport from the diary: each photo's place by GPS, and
+/// each place named in the child's words. Either one is enough, so a photo
+/// with a wrong or missing GPS tag still stamps if he wrote where it was.
+Set<String> stampsFromEntries(Iterable<Moment> moments) => passportStamps({
+  for (final m in moments) ...[?m.place, ...placesMentioned(m.text).map((p) => p.id)],
 });
 
 /// Gujarat's outline as (lat, lng), drawn on the passport map and used to

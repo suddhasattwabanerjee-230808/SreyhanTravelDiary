@@ -423,10 +423,9 @@ class _MomentScreenState extends State<MomentScreen> {
     // Somewhere not stamped before earns a new stamp in the passport.
     final text = tidySentence(joinWords(_words));
     final before = stampsFromEntries([
-      for (final d in await store.allDays())
-        for (final m in d.moments) m.text,
+      for (final d in await store.allDays()) ...d.moments,
     ]);
-    final fresh = placesMentioned(text).where((p) => !before.contains(p.id)).firstOrNull;
+    final fresh = [?_place, ...placesMentioned(text)].where((p) => !before.contains(p.id)).firstOrNull;
     final newStamp = fresh != null;
     final photo = await store.importPhoto(_photo!, _id);
     await store.addMoment(

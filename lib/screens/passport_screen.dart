@@ -45,8 +45,10 @@ class _PassportScreenState extends State<PassportScreen> {
     // Newest first, so the latest place is the one shown to start with.
     final visited = [
       for (final d in days)
-        for (final m in d.moments.reversed)
+        for (final m in d.moments.reversed) ...[
+          ?m.place,
           ...placesMentioned(m.text).map((p) => p.id),
+        ],
     ];
     if (!mounted) return;
     setState(() {
