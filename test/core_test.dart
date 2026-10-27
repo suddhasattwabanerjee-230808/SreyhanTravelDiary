@@ -292,6 +292,22 @@ void main() {
       expect(notified, 3);
     });
 
+    test('editing an entry changes only its words', () async {
+      final at = DateTime(2026, 10, 22, 9);
+      await store.addMoment(Moment(id: 'a', createdAt: at, photo: 'media/a.jpg', text: 'Old.', place: 'gir', feeling: 'happy'));
+      await store.addMoment(Moment(id: 'b', createdAt: at, photo: 'media/b.jpg', text: 'Other.'));
+
+      final when = DateTime(2026, 10, 27, 10);
+      await store.editMomentText('2026-10-22', 'a', 'New words.', when);
+
+      final day = await store.day('2026-10-22');
+      final a = day.moments.firstWhere((m) => m.id == 'a');
+      expect((a.text, a.place, a.feeling, a.photo, a.editedAt), ('New words.', 'gir', 'happy', 'media/a.jpg', when));
+      expect(day.moments.firstWhere((m) => m.id == 'b').text, 'Other.');
+      // The edit time survives a save and reload.
+      expect(Moment.fromJson(a.toJson()).editedAt, when);
+    });
+
     test('deleting a moment removes its photo', () async {
       final photo = File('${tmp.path}/p.jpg')..writeAsBytesSync([1]);
       final rel = await store.importPhoto(photo.path, 'x');

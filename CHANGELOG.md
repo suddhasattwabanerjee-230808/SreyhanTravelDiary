@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.5] - 2026-10-27
+
+### Added
+- Press and hold a page in a day to choose: change its words, or throw it
+  away. Changing the words keeps the photo, place and feeling, and the new
+  words reach the other phones too. Stamps follow the new words.
+
 ## [0.7.4] - 2026-10-27
 
 ### Changed

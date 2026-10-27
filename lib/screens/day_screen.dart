@@ -134,6 +134,66 @@ class _DayScreenState extends State<DayScreen> {
 
   bool get _isToday => widget.date == dateKey(_app.now());
 
+  /// Long press on a page: change the words, or throw the page away.
+  Future<void> _options(Moment m) async {
+    if (_readingAt != null) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Gj.sand,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_rounded, color: Gj.peacock, size: 32),
+                title: const Text('Change the words', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                onTap: () => Navigator.of(context).pop('edit'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_rounded, color: Gj.kumkum, size: 32),
+                title: const Text('Throw this page away', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                onTap: () => Navigator.of(context).pop('delete'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (choice == 'edit') await _edit(m);
+    if (choice == 'delete') await _delete(m);
+  }
+
+  Future<void> _edit(Moment m) async {
+    final controller = TextEditingController(text: m.text);
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Gj.sand,
+        title: const Text('Change the words'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 6,
+          textCapitalization: TextCapitalization.sentences,
+          style: const TextStyle(fontSize: 22),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (text == null || text.isEmpty || text == m.text) return;
+    _app.sounds.play(Sfx.pop);
+    await _app.store.editMomentText(widget.date, m.id, text, _app.now());
+  }
+
   Future<void> _delete(Moment m) async {
     if (!await askYesNo(context, 'Throw this page away?')) return;
     _app.sounds.play(Sfx.whoosh);
@@ -221,7 +281,7 @@ class _DayScreenState extends State<DayScreen> {
                                   index: i,
                                   speaking: _readingAt == i ? (_span ?? (0, 0)) : null,
                                   onHear: _readingAt == null ? () => _hear(i) : null,
-                                  onLongPress: () => _delete(m),
+                                  onLongPress: () => _options(m),
                                 ),
                               ),
                           ],

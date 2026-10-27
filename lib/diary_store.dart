@@ -91,6 +91,12 @@ class DiaryStore extends ChangeNotifier {
     await saveDay(d.copyWith(moments: [...d.moments, m]));
   }
 
+  /// Changes only the words of one entry.
+  Future<void> editMomentText(String date, String id, String text, DateTime when) async {
+    final d = await day(date);
+    await saveDay(d.copyWith(moments: [for (final m in d.moments) m.id == id ? m.withText(text, when) : m]));
+  }
+
   /// A whole day, with its photos (grown-ups' corner).
   Future<void> deleteDay(String date) async {
     final d = await day(date);

@@ -70,7 +70,7 @@ final _pages = [
   ),
   _Page(
     'Read your day',
-    'Tap a kite to see that day. Tap the speaker, and I will read it to you. Tap the moon, and I will read you the whole day!',
+    'Tap a kite to see that day. Press and hold a page to change its words or throw it away. Tap the speaker, and I will read it to you. Tap the moon, and I will read you the whole day!',
     Gj.lilac,
     () => const Row(
       mainAxisAlignment: MainAxisAlignment.center,

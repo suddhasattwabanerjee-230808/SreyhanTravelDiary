@@ -28,6 +28,11 @@ class CloudDiarySync {
   final Set<String> _syncedIds = {};
   Set<String> _localOnlyIds = {};
 
+  /// For each entry in the cloud, when its words were last edited there
+  /// (the epoch if never), so only newer edits are sent or taken.
+  final Map<String, DateTime> _cloudEdit = {};
+  static final _never = DateTime.fromMillisecondsSinceEpoch(0);
+
   bool get configured => Firebase.apps.isNotEmpty;
   User? get user => configured ? FirebaseAuth.instance.currentUser : null;
 
@@ -99,6 +104,9 @@ class CloudDiarySync {
     }
     _syncedIds.addAll(remote.docs.map((d) => d.id));
     _syncedIds.addAll(selected.map((m) => m.id));
+    for (final doc in remote.docs) {
+      _cloudEdit[doc.id] = _editOf(doc.data());
+    }
     await _writeState(account.uid, {
       'complete': true,
       'localOnlyIds': _localOnlyIds.toList(),
@@ -161,16 +169,19 @@ class CloudDiarySync {
         final data = change.doc.data();
         if (data == null) {
           _syncedIds.remove(id);
+          _cloudEdit.remove(id);
           continue;
         }
         final date = data['date'] as String?;
         if (date != null) await _store?.rememberRemoteDeletion(date, id);
         _syncedIds.remove(id);
+        _cloudEdit.remove(id);
         continue;
       }
       final data = change.doc.data();
       if (data == null) continue;
       _syncedIds.add(id);
+      _cloudEdit[id] = _editOf(data);
       await _mergeRemote(uid, id, data);
     }
   }
@@ -194,6 +205,14 @@ class CloudDiarySync {
       final moments = [...current.moments, incoming]
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
       await store.saveDay(current.copyWith(moments: moments));
+    } else {
+      final mine = current.moments[existing];
+      final theirs = incoming.editedAt;
+      if (theirs != null && (mine.editedAt == null || theirs.isAfter(mine.editedAt!))) {
+        // Another phone changed the words more recently.
+        final moments = [...current.moments]..[existing] = mine.withText(incoming.text, theirs);
+        await store.saveDay(current.copyWith(moments: moments));
+      }
     }
     final photo = store.file(incoming.photo);
     if (!await photo.exists()) {
@@ -239,10 +258,28 @@ class CloudDiarySync {
         await _upload(account.uid, moment);
         _syncedIds.add(moment.id);
       }
+      await _pushEdits(account.uid);
     } catch (e, st) {
       reportError('Diary cloud sync: $e', st);
     } finally {
       _working = false;
+    }
+  }
+
+  static DateTime _editOf(Map<String, dynamic> data) =>
+      DateTime.tryParse((data['editedAt'] as String?) ?? '') ?? _never;
+
+  /// Words edited on this phone since the cloud copy was written.
+  Future<void> _pushEdits(String uid) async {
+    for (final moment in await localMoments()) {
+      final edited = moment.editedAt;
+      final known = _cloudEdit[moment.id];
+      if (edited == null || known == null || !edited.isAfter(known)) continue;
+      await _moments(uid).doc(moment.id).set({
+        'text': moment.text,
+        'editedAt': edited.toIso8601String(),
+      }, SetOptions(merge: true));
+      _cloudEdit[moment.id] = edited;
     }
   }
 
@@ -262,6 +299,7 @@ class CloudDiarySync {
     await _moments(uid)
         .doc(moment.id)
         .set({...moment.toJson(), 'date': dateKey(moment.createdAt)});
+    _cloudEdit[moment.id] = moment.editedAt ?? _never;
   }
 
   Future<void> _deleteRemote(String uid, String id) async {
@@ -311,6 +349,7 @@ class CloudDiarySync {
     _retry?.cancel();
     _retry = null;
     _syncedIds.clear();
+    _cloudEdit.clear();
     _localOnlyIds.clear();
     _activeUid = null;
     _startingUid = null;

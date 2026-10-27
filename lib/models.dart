@@ -29,6 +29,7 @@ class Moment {
     this.source = 'camera',
     this.feeling,
     this.place,
+    this.editedAt,
   });
 
   final String id;
@@ -55,6 +56,24 @@ class Moment {
   /// Where the photo was taken, a place id from places.dart, if known.
   final String? place;
 
+  /// When the words were last changed by hand, if ever. Sync uses it to
+  /// carry the newest wording to every phone.
+  final DateTime? editedAt;
+
+  /// The same entry with new words.
+  Moment withText(String text, DateTime editedAt) => Moment(
+    id: id,
+    createdAt: createdAt,
+    photo: photo,
+    text: text,
+    labels: labels,
+    learned: learned,
+    source: source,
+    feeling: feeling,
+    place: place,
+    editedAt: editedAt,
+  );
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'createdAt': createdAt.toIso8601String(),
@@ -65,6 +84,7 @@ class Moment {
     'source': source,
     'feeling': ?feeling,
     'place': ?place,
+    if (editedAt != null) 'editedAt': editedAt!.toIso8601String(),
   };
 
   factory Moment.fromJson(Map<String, dynamic> j) => Moment(
@@ -77,6 +97,7 @@ class Moment {
     source: (j['source'] as String?) ?? 'camera',
     feeling: j['feeling'] as String?,
     place: j['place'] as String?,
+    editedAt: DateTime.tryParse((j['editedAt'] as String?) ?? ''),
   );
 }
 
