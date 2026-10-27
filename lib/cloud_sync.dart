@@ -6,7 +6,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart';
 
 import 'app_channel.dart';
 import 'diary_store.dart';
@@ -82,7 +81,6 @@ class CloudDiarySync {
   /// First-time setup on each phone: selected local entries join the shared
   /// diary, then existing cloud entries are brought down to this phone.
   Future<int> finishFirstSync(User account, Set<String> selectedIds) async {
-    final store = _store!;
     final local = await localMoments();
     final selected = [
       for (final m in local)
@@ -222,8 +220,9 @@ class CloudDiarySync {
     if (store == null ||
         account == null ||
         _working ||
-        !await setupComplete(account))
+        !await setupComplete(account)) {
       return;
+    }
     _working = true;
     try {
       final deleted = await store.deletedMomentIds();
@@ -233,8 +232,10 @@ class CloudDiarySync {
         _syncedIds.remove(id);
       }
       for (final moment in await localMoments()) {
-        if (_localOnlyIds.contains(moment.id) || _syncedIds.contains(moment.id))
+        if (_localOnlyIds.contains(moment.id) ||
+            _syncedIds.contains(moment.id)) {
           continue;
+        }
         await _upload(account.uid, moment);
         _syncedIds.add(moment.id);
       }
@@ -248,8 +249,9 @@ class CloudDiarySync {
   Future<void> _upload(String uid, Moment moment) async {
     final store = _store!;
     final photo = store.file(moment.photo);
-    if (!await photo.exists())
+    if (!await photo.exists()) {
       throw FileSystemException('The photo file is missing', photo.path);
+    }
     final contentType = moment.photo.toLowerCase().endsWith('.png')
         ? 'image/png'
         : 'image/jpeg';
@@ -298,8 +300,9 @@ class CloudDiarySync {
   File _stateFile(String uid) => _store!.file('sync/accounts/$uid.json');
 
   void _requireFirebase() {
-    if (!configured)
+    if (!configured) {
       throw StateError('Firebase is not configured on this build yet.');
+    }
   }
 
   void _stop() {

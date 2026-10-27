@@ -448,7 +448,7 @@ class _MomentScreenState extends State<MomentScreen> {
     setState(() {
       _celebrating = true;
       _sheruSays = newStamp
-          ? 'Well done! And a new stamp in your passport: ${fresh!.name}!'
+          ? 'Well done! And a new stamp in your passport: ${fresh.name}!'
           : "Well done! It's in your diary!";
     });
     await Future.delayed(Duration(milliseconds: newStamp ? 2600 : 1800));

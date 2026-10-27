@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2] - 2026-10-27
+
+### Fixed
+- The 0.7.0 and 0.7.1 builds stopped at the code check and were never
+  published. This version has the same changes (phone-number text-code sync,
+  stamps from the child's own words, kite dates for older days) and passes.
+
 ## [0.7.1] - 2026-10-27
 
 ### Added
