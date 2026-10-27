@@ -57,7 +57,7 @@ Future<void> main() async {
     final store = await opening;
     final prefs = await loading;
     await cloud;
-    await CloudDiarySync.instance.attach(store);
+    await CloudDiarySync.instance.attach(store, places: DevicePlaceFinder());
     runApp(
       DiaryApp(
         store: store,

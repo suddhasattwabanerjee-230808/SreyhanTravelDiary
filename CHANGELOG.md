@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0] - 2026-10-27
+
+### Added
+- Sync the diary across phones from the grown-ups' corner. Sign in with a
+  one-time text code (SMS OTP) sent to the same phone number on every phone.
+  Each phone does a one-time choice of which entries to add; after that new
+  entries and deletions sync by themselves.
+
+### Fixed
+- Map stamps now match on every synced phone. An entry that was saved without
+  a place gets one from its photo's own GPS tag, the place is sent to the
+  other phones, and a place found on one phone unlocks on the rest.
+
 ## [0.6.1] - 2026-10-22
 
 ### Fixed

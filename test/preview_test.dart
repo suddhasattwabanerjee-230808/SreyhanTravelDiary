@@ -92,6 +92,8 @@ class FakeTranslator implements WordTranslator {
 class FakePlaces implements PlaceFinder {
   @override
   Future<Place?> find(String path, {required bool camera}) async => placeById('white_rann');
+  @override
+  Future<Place?> fromPhoto(String path) async => null;
 }
 
 class SilentSpeaker implements Speaker {

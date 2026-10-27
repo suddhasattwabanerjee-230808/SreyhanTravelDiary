@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "996817683285",
+    "project_id": "sreyhan-travel-diary-20816",
+    "storage_bucket": "sreyhan-travel-diary-20816.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:996817683285:android:2ad4bc38a23fb3632265dc",
+        "android_client_info": {
+          "package_name": "com.bittu.sreyhan_diary"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYvugT7nLtA5HFA-grFFm16UL_jWWt-OI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

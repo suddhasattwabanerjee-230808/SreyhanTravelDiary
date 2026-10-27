@@ -10,24 +10,32 @@ project. TripSplit's Firebase and Cloudflare setup stays separate.
 2. In that new project, add an **Android app** with package name
    `com.bittu.sreyhan_diary`. Download its `google-services.json` file and put
    it here: `android/app/google-services.json`.
-3. In the new project, enable **Email/Password** under Authentication →
-   Sign-in method. Create a Firestore database and a Storage bucket.
-4. Install the Firebase command line tool, sign in, and choose the new diary
-   project from this folder:
+3. Add the Android signing fingerprints in Project settings → General → Your
+   apps → `com.bittu.sreyhan_diary` → SHA certificate fingerprints:
+
+   - SHA-1: `32:31:9A:34:CA:FF:D6:59:45:70:C3:6E:AD:E2:BC:52:2F:EC:EE:A5`
+   - SHA-256: `A6:12:28:86:A4:ED:FB:B6:E7:41:DD:33:BE:81:D1:19:7F:49:13:64:64:22:18:B3:39:0D:9F:7F:65:E3:B2:F4`
+
+4. In Authentication → Sign-in providers, turn on **Phone** and save. In
+   Authentication → Settings → SMS region policy, allow the country code for
+   the phone that will receive the codes (India for a `+91` number). The number
+   itself is entered in the app; the optional test-number field is only for
+   Firebase test numbers.
+5. Create a Firestore database and a Storage bucket.
+6. Install the Firebase command line tool, sign in, and deploy this app's rules
+   from the diary project folder:
 
    ```sh
    npm install -g firebase-tools
    firebase login
-   firebase use --add
    firebase deploy --only firestore:rules,storage
    ```
 
-   When asked, select **Sreyhan Travel Diary**, not TripSplit.
-5. Build and install the app on all three phones. In the grown-ups' corner,
-   create the account on one phone. Use that same email and password on the
-   other two. On each phone, select which existing entries to add. The selected
-   entries and their photos merge into the shared diary; new entries then sync
-   automatically.
+   This folder is already set to project `sreyhan-travel-diary-20816`.
+7. Build and install the updated app on all three phones. In the grown-ups'
+   corner, enter the same phone number on every phone and verify each with the
+   SMS code. The first verification creates the diary account. Select which
+   existing entries to add on each phone; new entries then sync automatically.
 
 **Storage billing:** Firebase requires the new project to use the Blaze billing
 plan for Cloud Storage. Check this before creating the bucket. If you do not

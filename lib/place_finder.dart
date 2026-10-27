@@ -9,6 +9,10 @@ import 'places.dart';
 abstract class PlaceFinder {
   /// Null when it can't tell.
   Future<Place?> find(String path, {required bool camera});
+
+  /// Only the photo's own GPS tag, never where the phone is now. For entries
+  /// saved without a place, so syncing can stamp them later.
+  Future<Place?> fromPhoto(String path);
 }
 
 /// Knows nowhere: for previews and tests.
@@ -16,6 +20,8 @@ class NoPlaces implements PlaceFinder {
   const NoPlaces();
   @override
   Future<Place?> find(String path, {required bool camera}) async => null;
+  @override
+  Future<Place?> fromPhoto(String path) async => null;
 }
 
 class DevicePlaceFinder implements PlaceFinder {
@@ -37,6 +43,18 @@ class DevicePlaceFinder implements PlaceFinder {
       return here == null ? null : placeAt(here.$1, here.$2);
     } catch (e, st) {
       reportError('Finding the place: $e', st);
+      return null;
+    }
+  }
+
+  @override
+  Future<Place?> fromPhoto(String path) async {
+    try {
+      final tags = await _channel.invokeMapMethod<String, Object?>('photo', {'path': path}).timeout(const Duration(seconds: 5));
+      final spot = _latLng(tags);
+      return spot == null ? null : placeAt(spot.$1, spot.$2);
+    } catch (e, st) {
+      reportError('Finding the place of a synced photo: $e', st);
       return null;
     }
   }

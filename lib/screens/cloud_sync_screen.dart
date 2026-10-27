@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
 import '../cloud_sync.dart';
+import '../diary_store.dart';
 import '../models.dart';
 import '../theme.dart';
 
@@ -17,16 +20,20 @@ class CloudSyncScreen extends StatefulWidget {
 class _CloudSyncScreenState extends State<CloudSyncScreen> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
-  final _email = TextEditingController();
-  final _password = TextEditingController();
+  final _phone = TextEditingController();
+  final _otp = TextEditingController();
   User? _account;
   List<Moment>? _local;
   Set<String> _selected = {};
-  bool _register = false;
   bool _busy = false;
+  bool _signingIn = false;
   bool _configured = false;
+  String? _verificationId;
+  int? _resendToken;
   String? _error;
   String? _message;
+
+  String get _normalizedPhone => _phone.text.replaceAll(RegExp(r'[\s()-]'), '');
 
   CloudDiarySync get _sync => CloudDiarySync.instance;
   DiaryStore get _store => App.of(context).store;
@@ -47,28 +54,77 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
   @override
   void dispose() {
     _name.dispose();
-    _email.dispose();
-    _password.dispose();
+    _phone.dispose();
+    _otp.dispose();
     super.dispose();
   }
 
-  Future<void> _authenticate() async {
+  Future<void> _sendCode() async {
     if (!_form.currentState!.validate()) return;
     setState(() {
       _busy = true;
       _error = null;
+      _message = null;
     });
     try {
-      if (_register) {
-        await _sync.createAccount(_email.text, _password.text, _name.text);
-      } else {
-        await _sync.signIn(_email.text, _password.text);
-      }
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: _normalizedPhone,
+        timeout: const Duration(seconds: 60),
+        forceResendingToken: _resendToken,
+        verificationCompleted: (credential) =>
+            unawaited(_completePhoneSignIn(credential)),
+        verificationFailed: (error) {
+          if (mounted) setState(() => _error = _authMessage(error));
+        },
+        codeSent: (verificationId, resendToken) {
+          if (!mounted) return;
+          setState(() {
+            _verificationId = verificationId;
+            _resendToken = resendToken;
+            _message = 'Code sent by text message to ${_phone.text.trim()}.';
+          });
+        },
+        codeAutoRetrievalTimeout: (verificationId) {
+          if (mounted) setState(() => _verificationId = verificationId);
+        },
+      );
+    } catch (error) {
+      if (mounted) setState(() => _error = _authMessage(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _confirmCode() async {
+    final id = _verificationId;
+    if (id == null || _otp.text.trim().length < 6) {
+      setState(() => _error = 'Enter the 6-digit code from the text message.');
+      return;
+    }
+    final credential = PhoneAuthProvider.credential(
+      verificationId: id,
+      smsCode: _otp.text.trim(),
+    );
+    await _completePhoneSignIn(credential);
+  }
+
+  Future<void> _completePhoneSignIn(PhoneAuthCredential credential) async {
+    if (_signingIn) return;
+    _signingIn = true;
+    if (mounted) {
+      setState(() {
+        _busy = true;
+        _error = null;
+      });
+    }
+    try {
+      await _sync.signInWithPhoneCredential(credential, childName: _name.text);
       _account = _sync.user;
       await _prepareReview();
-    } catch (e) {
-      if (mounted) setState(() => _error = _authMessage(e));
+    } catch (error) {
+      if (mounted) setState(() => _error = _authMessage(error));
     } finally {
+      _signingIn = false;
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -149,13 +205,17 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
   String _authMessage(Object error) {
     if (error is FirebaseAuthException) {
       return switch (error.code) {
-        'email-already-in-use' =>
-          'That email already has an account. Sign in instead.',
-        'invalid-credential' ||
-        'wrong-password' ||
-        'user-not-found' => 'The email or password is not right.',
-        'weak-password' => 'Choose a password with at least 6 characters.',
-        'invalid-email' => 'Enter a valid email address.',
+        'invalid-phone-number' =>
+          'Enter the phone number with its country code, such as +91….',
+        'invalid-verification-code' =>
+          'That code is not right. Check the text and try again.',
+        'code-expired' => 'That code expired. Ask for a new code.',
+        'too-many-requests' =>
+          'Too many tries. Wait a little before trying again.',
+        'quota-exceeded' => 'Firebase SMS limit reached. Try later or check the project billing settings.',
+        'operation-not-allowed' =>
+          'Turn on Phone sign-in in the Firebase project.',
+        'app-not-authorized' => 'Add this app’s SHA-1 and SHA-256 fingerprints in Firebase Project settings.',
         _ => error.message ?? 'Could not connect to the account.',
       };
     }
@@ -198,9 +258,9 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       _panel(
-        icon: Icons.cloud_sync_rounded,
-        title: 'One diary on three phones',
-        body: 'Use the same email and password on all three phones. Each phone gets one review to choose which of its existing entries to add.',
+        icon: Icons.sms_rounded,
+        title: 'Sign in with a text code',
+        body: 'Use the same phone number on all three phones. Firebase texts a one-time code to that number. The first successful sign-in creates the diary account.',
       ),
       const SizedBox(height: 14),
       Card(
@@ -210,55 +270,73 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
             key: _form,
             child: Column(
               children: [
-                if (_register) ...[
-                  TextFormField(
-                    controller: _name,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: "Child's name",
-                    ),
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Enter a name.' : null,
-                  ),
-                  const SizedBox(height: 10),
-                ],
                 TextFormField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  validator: (v) => v == null || !v.contains('@')
-                      ? 'Enter a valid email.'
-                      : null,
+                  controller: _name,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: "Child's name (optional)",
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
-                  controller: _password,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Password'),
-                  validator: (v) => v == null || v.length < 6
-                      ? 'Use at least 6 characters.'
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  autofillHints: const [AutofillHints.telephoneNumber],
+                  decoration: const InputDecoration(
+                    labelText: 'Phone number with country code',
+                    hintText: '+91 98765 43210',
+                  ),
+                  onChanged: (_) {
+                    if (_verificationId != null) {
+                      setState(() {
+                        _verificationId = null;
+                        _resendToken = null;
+                        _otp.clear();
+                      });
+                    }
+                  },
+                  validator: (v) =>
+                      v == null ||
+                          !RegExp(r'^\+[1-9]\d{7,14}$')
+                              .hasMatch(v.replaceAll(RegExp(r'[\s()-]'), ''))
+                      ? 'Enter the full number, including + and country code.'
                       : null,
                 ),
+                if (_verificationId != null) ...[
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _otp,
+                    keyboardType: TextInputType.number,
+                    autofillHints: const [AutofillHints.oneTimeCode],
+                    maxLength: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'Text message code',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: _busy ? null : _authenticate,
-                  icon: Icon(
-                    _register
-                        ? Icons.person_add_alt_1_rounded
-                        : Icons.login_rounded,
-                  ),
-                  label: Text(_register ? 'Create diary account' : 'Sign in'),
-                ),
-                TextButton(
                   onPressed: _busy
                       ? null
-                      : () => setState(() => _register = !_register),
-                  child: Text(
-                    _register
-                        ? 'Already set up? Sign in'
-                        : 'First phone? Create your son’s account',
+                      : _verificationId == null
+                      ? _sendCode
+                      : _confirmCode,
+                  icon: Icon(
+                    _verificationId == null
+                        ? Icons.sms_rounded
+                        : Icons.verified_user_rounded,
+                  ),
+                  label: Text(
+                    _verificationId == null
+                        ? 'Send one-time code'
+                        : 'Verify code',
                   ),
                 ),
+                if (_verificationId != null)
+                  TextButton(
+                    onPressed: _busy ? null : _sendCode,
+                    child: const Text('Send a new code'),
+                  ),
               ],
             ),
           ),
@@ -364,7 +442,7 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
         icon: Icons.cloud_done_rounded,
         title: 'Sync is on',
         body:
-            'Signed in as ${_account!.email ?? _account!.displayName ?? 'your diary account'}. New entries and deletions sync through Firebase. Photos are stored with the diary.',
+            'Signed in as ${_account!.phoneNumber ?? _account!.displayName ?? 'your diary account'}. New entries and deletions sync through Firebase. Photos are stored with the diary.',
       ),
       const SizedBox(height: 14),
       FilledButton.icon(
