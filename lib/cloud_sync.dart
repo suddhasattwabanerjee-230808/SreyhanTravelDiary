@@ -11,7 +11,6 @@ import 'package:flutter/foundation.dart';
 import 'app_channel.dart';
 import 'diary_store.dart';
 import 'models.dart';
-import 'place_finder.dart';
 
 /// Account and continuous diary sync for the grown-ups' corner.
 /// Diary data is private to the Firebase account UID. Photos live in Storage;
@@ -21,7 +20,6 @@ class CloudDiarySync {
   static final instance = CloudDiarySync._();
 
   DiaryStore? _store;
-  PlaceFinder? _places;
   StreamSubscription<User?>? _authWatch;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _remoteWatch;
   Timer? _retry;
@@ -34,9 +32,8 @@ class CloudDiarySync {
   bool get configured => Firebase.apps.isNotEmpty;
   User? get user => configured ? FirebaseAuth.instance.currentUser : null;
 
-  Future<void> attach(DiaryStore store, {PlaceFinder? places}) async {
+  Future<void> attach(DiaryStore store) async {
     _store = store;
-    _places = places;
     if (!configured || _authWatch != null) return;
     _authWatch = FirebaseAuth.instance.authStateChanges().listen((account) {
       if (account == null) {
@@ -199,11 +196,6 @@ class CloudDiarySync {
       final moments = [...current.moments, incoming]
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
       await store.saveDay(current.copyWith(moments: moments));
-    } else if (current.moments[existing].place == null && incoming.place != null) {
-      // Another phone worked out where this was taken: unlock it here too.
-      final moments = [...current.moments]
-        ..[existing] = current.moments[existing].withPlace(incoming.place);
-      await store.saveDay(current.copyWith(moments: moments));
     }
     final photo = store.file(incoming.photo);
     if (!await photo.exists()) {
@@ -240,7 +232,6 @@ class CloudDiarySync {
         await store.clearDeletedMomentId(id);
         _syncedIds.remove(id);
       }
-      await _fillMissingPlaces(account.uid);
       for (final moment in await localMoments()) {
         if (_localOnlyIds.contains(moment.id) || _syncedIds.contains(moment.id))
           continue;
@@ -251,31 +242,6 @@ class CloudDiarySync {
       reportError('Diary cloud sync: $e', st);
     } finally {
       _working = false;
-    }
-  }
-
-  /// Entries saved without a place (no GPS then) get one from the photo's own
-  /// GPS tag, and the new place is pushed so every phone's map agrees.
-  Future<void> _fillMissingPlaces(String uid) async {
-    final store = _store;
-    final finder = _places;
-    if (store == null || finder == null) return;
-    for (final day in await store.allDays()) {
-      var changed = false;
-      final moments = [...day.moments];
-      for (final (i, m) in moments.indexed) {
-        if (m.place != null) continue;
-        final photo = store.file(m.photo);
-        if (!await photo.exists()) continue;
-        final place = await finder.fromPhoto(photo.path);
-        if (place == null) continue;
-        moments[i] = m.withPlace(place.id);
-        changed = true;
-        if (_syncedIds.contains(m.id) && !_localOnlyIds.contains(m.id)) {
-          await _moments(uid).doc(m.id).set({'place': place.id}, SetOptions(merge: true));
-        }
-      }
-      if (changed) await store.saveDay(day.copyWith(moments: moments));
     }
   }
 

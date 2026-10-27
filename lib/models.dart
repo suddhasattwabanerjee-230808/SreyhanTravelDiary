@@ -55,18 +55,6 @@ class Moment {
   /// Where the photo was taken, a place id from places.dart, if known.
   final String? place;
 
-  Moment withPlace(String? place) => Moment(
-    id: id,
-    createdAt: createdAt,
-    photo: photo,
-    text: text,
-    labels: labels,
-    learned: learned,
-    source: source,
-    feeling: feeling,
-    place: place,
-  );
-
   Map<String, dynamic> toJson() => {
     'id': id,
     'createdAt': createdAt.toIso8601String(),

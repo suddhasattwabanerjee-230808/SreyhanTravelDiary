@@ -27,7 +27,7 @@ class _Page {
 final _pages = [
   _Page(
     'Take a photo',
-    'Tap Add a picture. Take a photo, or pick one you already have.',
+    'Tap Add a picture. Take a photo, or pick one you already have. Is it from another day? Tap that day\'s kite, or the Older kite for any day before.',
     Gj.saffron,
     () => const _Pretend(child: KutchButton(label: 'Add a picture', icon: Icons.add_a_photo_rounded, onTap: _nothing)),
   ),
@@ -107,7 +107,7 @@ final _pages = [
   ),
   _Page(
     'My Passport',
-    'Every new place you take a photo gets a stamp! Tap Map to see your stamps, and tap a stamp for a fun fact. Photos synced from other phones bring their stamps too.',
+    'Every new place you take a photo gets a stamp! Tap Map to see your stamps, and tap a stamp for a fun fact. The places you write about in your words get the stamps.',
     Gj.teal,
     () => const _Stamps(),
   ),

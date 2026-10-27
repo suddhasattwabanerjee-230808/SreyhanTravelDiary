@@ -212,6 +212,12 @@ List<Place> placesMentioned(String text) => [
       place,
 ];
 
+/// Every stamp in the passport, from the places the child wrote about in his
+/// entries. The text decides, not the photo's GPS, which can be inaccurate.
+Set<String> stampsFromEntries(Iterable<String> texts) => passportStamps({
+  for (final t in texts) ...placesMentioned(t).map((p) => p.id),
+});
+
 /// Gujarat's outline as (lat, lng), drawn on the passport map and used to
 /// tell whether a photo was taken in Gujarat. Rough, like a cartoon map.
 const gujaratOutline = <(double, double)>[

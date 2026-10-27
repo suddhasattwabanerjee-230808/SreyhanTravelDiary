@@ -440,9 +440,9 @@ class _Progress extends StatelessWidget {
     final pictures = stats.fold(0, (n, s) => n + s.pictures);
     final words = stats.fold(0, (n, s) => n + s.words);
     final describing = stats.fold(0, (n, s) => n + s.describing);
-    final stamps = passportStamps([
+    final stamps = stampsFromEntries([
       for (final d in days)
-        for (final m in d.moments) ?m.place,
+        for (final m in d.moments) m.text,
     ]).length;
     final recent = stats.length > 10 ? stats.sublist(stats.length - 10) : stats;
     String label(DayStats s) => shortDate(DateTime.parse(s.date));

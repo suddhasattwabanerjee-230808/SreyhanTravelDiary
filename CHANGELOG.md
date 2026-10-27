@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.1] - 2026-10-27
+
+### Added
+- Add a picture from an older day. Today is picked to start, with a row of
+  kites for the last week (each with its weekday and date) and an Older kite
+  that opens any month as kites. The chosen day is spelled out ("Saturday,
+  24 October", "3 days ago") so it is easy to tell which one it is.
+
+### Changed
+- Passport stamps now come from the places named in the child's own words, not
+  from the photo's GPS, which can be off. Because the words sync, every phone
+  shows the same stamps.
+
 ## [0.7.0] - 2026-10-27
 
 ### Added

@@ -13,6 +13,7 @@ import '../theme.dart';
 import '../translate.dart';
 import '../vision.dart';
 import '../voice.dart';
+import '../widgets/kite_date.dart';
 import '../widgets/mic_button.dart';
 import '../widgets/playful.dart';
 import '../widgets/sheru.dart';
@@ -57,6 +58,9 @@ class _MomentScreenState extends State<MomentScreen> {
   var _labels = <String>[];
   var _questions = <String>[];
   int _prompt = 0;
+
+  // Which diary day this photo goes in; null means today.
+  DateTime? _date;
 
   // Where it was taken, and how the child felt.
   Place? _place;
@@ -123,6 +127,20 @@ class _MomentScreenState extends State<MomentScreen> {
     }
     final prompts = [..._questions, ...offlinePrompts.skip(1)];
     return prompts[(_prompt - 1) % prompts.length];
+  }
+
+  DateTime get _day => _date ?? dayOnly(_app.now());
+
+  /// The chosen day, at the time of day it is now, so entries keep their order.
+  DateTime _createdAt() {
+    final now = _app.now();
+    final d = _day;
+    return d == dayOnly(now) ? now : DateTime(d.year, d.month, d.day, now.hour, now.minute, now.second);
+  }
+
+  Future<void> _changeDay() async {
+    final d = await pickKiteDate(context, initial: _day, today: _app.now());
+    if (d != null && mounted) setState(() => _date = d);
   }
 
   // --- Photo ------------------------------------------------------------------
@@ -403,18 +421,20 @@ class _MomentScreenState extends State<MomentScreen> {
     await _app.speaker.stop();
     final store = _app.store;
     // Somewhere not stamped before earns a new stamp in the passport.
-    final before = passportStamps([
+    final text = tidySentence(joinWords(_words));
+    final before = stampsFromEntries([
       for (final d in await store.allDays())
-        for (final m in d.moments) ?m.place,
+        for (final m in d.moments) m.text,
     ]);
-    final newStamp = _place != null && !before.contains(_place!.id);
+    final fresh = placesMentioned(text).where((p) => !before.contains(p.id)).firstOrNull;
+    final newStamp = fresh != null;
     final photo = await store.importPhoto(_photo!, _id);
     await store.addMoment(
       Moment(
         id: _id,
-        createdAt: _app.now(),
+        createdAt: _createdAt(),
         photo: photo,
-        text: tidySentence(joinWords(_words)),
+        text: text,
         labels: _labels,
         learned: List.of(_learned),
         source: _source,
@@ -428,7 +448,7 @@ class _MomentScreenState extends State<MomentScreen> {
     setState(() {
       _celebrating = true;
       _sheruSays = newStamp
-          ? 'Well done! And a new stamp in your passport: ${_place!.name}!'
+          ? 'Well done! And a new stamp in your passport: ${fresh!.name}!'
           : "Well done! It's in your diary!";
     });
     await Future.delayed(Duration(milliseconds: newStamp ? 2600 : 1800));
@@ -502,8 +522,10 @@ class _MomentScreenState extends State<MomentScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              const SheruSays('Show me what you saw today!', size: 120),
-              const SizedBox(height: 24),
+              SheruSays(_day == dayOnly(_app.now()) ? 'Show me what you saw today!' : 'Show me your photo from that day!', size: 120),
+              const SizedBox(height: 16),
+              KiteDateStrip(date: _day, today: _app.now(), onChanged: (d) => setState(() => _date = d)),
+              const SizedBox(height: 16),
               _PhotoChoice(
                 color: Gj.saffron,
                 icon: Icons.photo_camera_rounded,
@@ -537,6 +559,8 @@ class _MomentScreenState extends State<MomentScreen> {
             padding: EdgeInsets.fromLTRB(24, 18, 24, keyboardUp ? 120 : 220),
             child: Column(
               children: [
+                _dayChip(),
+                const SizedBox(height: 10),
                 _photoCard(),
                 const SizedBox(height: 18),
                 SheruSays(_message, size: 84, listening: _listening, level: _level, happy: _celebrating),
@@ -575,6 +599,38 @@ class _MomentScreenState extends State<MomentScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Which day this goes in, with a tap to change it.
+  Widget _dayChip() {
+    final d = _day;
+    return GestureDetector(
+      onTap: _listening || _celebrating ? null : _changeDay,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Gj.lilac, width: 3),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.paragliding_rounded, color: Gj.lilac),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                '${daysAgo(d, _app.now())} · ${prettyDate(d)}',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(Icons.edit_calendar_rounded, color: Gj.inkSoft, size: 20),
+          ],
+        ),
+      ),
     );
   }
 
