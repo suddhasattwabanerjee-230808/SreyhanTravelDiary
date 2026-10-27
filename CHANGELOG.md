@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3] - 2026-10-27
+
+### Fixed
+- The 0.7.0 to 0.7.2 builds never started because of a GitHub billing limit,
+  so none were published. This version has the same changes: phone-number
+  text-code sync, stamps from the child's own words, kite dates for older days.
+
 ## [0.7.2] - 2026-10-27
 
 ### Fixed
